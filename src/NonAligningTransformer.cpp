@@ -1,5 +1,6 @@
 #include "NonAligningTransformer.hpp"
 #include <base-logging/Logging.hpp>
+#include <sstream>
 
 transformer::NonAlignedDynamicTransformationElement::NonAlignedDynamicTransformationElement(const std::string& sourceFrame, const std::string& targetFrame): TransformationElement(sourceFrame, targetFrame)
 {
@@ -46,8 +47,11 @@ void transformer::NonAligningTransformer::pushDynamicTransformation(const transf
         throw std::runtime_error("Dynamic transformation with empty target or source frame given");
 
     if(tr.time.isNull())
-        throw std::runtime_error("Dynamic transformation without time given (or it is 1970 ;-P)");
-
+    {
+        std::stringstream msg;
+        msg << "Dynamic transformation (" << tr.sourceFrame << " => " << tr.targetFrame << ") has no timestamp!";
+        throw std::runtime_error(msg.str());
+    }
     std::map<std::pair<std::string, std::string>, NonAlignedDynamicTransformationElement *>::iterator it = transformToElementMap.find(std::make_pair(tr.sourceFrame, tr.targetFrame));
     
     //we got an unknown transformation

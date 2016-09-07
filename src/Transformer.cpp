@@ -3,6 +3,7 @@
 #include <Eigen/SVD>
 #include <assert.h>
 #include <base-logging/Logging.hpp>
+#include <sstream>
 
 namespace transformer {
     
@@ -497,8 +498,11 @@ void Transformer::pushDynamicTransformation(const transformer::TransformationTyp
 	throw std::runtime_error("Dynamic transformation with empty target or source frame given");
 
     if(tr.time.isNull())
-	throw std::runtime_error("Dynamic transformation without time given (or it is 1970 ;-P)");
-
+    {
+        std::stringstream msg;
+        msg << "Dynamic transformation (" << tr.sourceFrame << " => " << tr.targetFrame << ") has no timestamp!";
+        throw std::runtime_error(msg.str());
+    }
     std::map<std::pair<std::string, std::string>, int>::iterator it = transformToStreamIndex.find(std::make_pair(tr.sourceFrame, tr.targetFrame));
     
     //we got an unknown transformation
