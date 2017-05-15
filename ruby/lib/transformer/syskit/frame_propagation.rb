@@ -340,8 +340,19 @@ module Transformer
         #   frame to a global frame name
         def self.initial_frame_selection_from_device(task, dev)
             tr = task.model.transformer
-            selected_frame = dev.frame
-            selected_transform = dev.frame_transform
+            if selected_frame = dev.frame
+                if !task.transformer.has_frame?(selected_frame)
+                    raise Transformer::InvalidConfiguration, "undefined frame #{selected_frame} selected as reference frame for #{dev}"
+                end
+            end
+            if selected_transform = dev.frame_transform
+                if !task.transformer.has_frame?(selected_transform.from)
+                    raise Transformer::InvalidConfiguration, "undefined frame #{selected_transform.from} selected as 'from' frame for #{dev}"
+                end
+                if !task.transformer.has_frame?(selected_transform.to)
+                    raise Transformer::InvalidConfiguration, "undefined frame #{selected_transform.to} selected as 'to' frame for #{dev}"
+                end
+            end
 
             new_selections = Hash.new
             task.find_all_driver_services_for(dev).each do |srv|
@@ -424,6 +435,11 @@ module Transformer
                     current_selection
                 else
                     debug { "adding frame selection from #{task}: #{new_selections}" }
+                    new_selections.each do |frame_name, selected_frame|
+                        if !task.transformer.has_frame?(selected_frame)
+                            raise InvalidConfiguration, "undefined frame #{selected_frame} selected for '#{frame_name}' in #{task}"
+                        end
+                    end
                     new_selections
                 end
             result = result.merge(static_frames)
