@@ -86,6 +86,11 @@ module Transformer
                 end
             end
         end
+
+        # Resolves the transform associated with a port
+        def find_transform_of_port(port)
+            model.find_transform_of_port(port.attach(model))
+        end
     end
 end
 
