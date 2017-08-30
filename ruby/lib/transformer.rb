@@ -526,12 +526,14 @@ module Transformer
 
             transforms = Hash.new
             @transforms.each do |(from, to), tr|
-                transforms[[tr.from, tr.to]] = tr.rename_frames(mapping).freeze
+                tr = tr.rename_frames(mapping).freeze
+                transforms[[tr.from, tr.to]] = tr
             end
 
             example_transforms = Hash.new
             @example_transforms.each do |(from, to), tr|
-                example_transforms[[tr.from, tr.to]] = tr.rename_frames(mapping).freeze
+                tr = tr.rename_frames(mapping).freeze
+                example_transforms[[tr.from, tr.to]] = tr
             end
 
             @frames = frames
