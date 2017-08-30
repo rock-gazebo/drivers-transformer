@@ -142,14 +142,5 @@ class TC_Transformer < Minitest::Test
         assert_equal 2, copy.transforms.size
         assert_equal 3, copy.frames.size
     end
-
-    def test_dup_isolates_the_static_transformations_of_the_receiver_from_the_new_object
-        trsf = Transformer::TransformationManager.new
-        conf = trsf.conf
-        conf.static_transform Eigen::Vector3.new(0, 0, 0), "body" => "servo_low"
-        copy = conf.dup
-        conf.transforms.first[1].translation.x = 10
-        assert_equal 0, copy.transforms.first[1].translation.x
-    end
 end
 
