@@ -75,6 +75,18 @@ module Transformer
                 assert_equal Eigen::Quaternion.Identity, t.rotation
             end
         end
+
+        describe "handling of models in models" do
+            it "creates properly namespaced frames" do
+                conf.load_sdf('model://joint_with_world_link')
+                assert conf.has_frame?('root::submodel::l')
+            end
+            it "handles namespaces properly when creating cross-model joints" do
+                conf.load_sdf('model://joint_with_world_link')
+                t = conf.transformation_for('root::l', 'root::submodel::l')
+                assert_equal 'root::l', t.from
+                assert_equal 'root::submodel::l', t.to
+            end
         end
     end
 end

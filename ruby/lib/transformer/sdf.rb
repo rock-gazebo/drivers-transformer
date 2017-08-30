@@ -40,12 +40,15 @@ module Transformer
 
         def parse_sdf_links_and_joints(sdf, prefix = "", parent_name = "", world_name: nil, &producer_resolver)
             root_links = Hash.new
-            sdf.each_link do |l|
-                root_links[l.name] = l
+            relative_link_names = Hash.new
+            sdf.each_link_with_name do |l, l_name|
+                root_links[l_name] = l
+                relative_link_names[l] = l_name
             end
 
             world_link = ::SDF::Link::World
-            sdf.each_joint do |j|
+
+            sdf.each_joint_with_name do |j|
                 parent = j.parent_link
                 child  = j.child_link
                 root_links.delete(child.name)
@@ -73,12 +76,12 @@ module Transformer
                 if world_name && (parent == world_link)
                     parent = world_name 
                 else
-                    parent = sdf_append_name(parent_name, parent.name)
+                    parent = sdf_append_name(parent_name, relative_link_names[parent])
                 end
                 if world_name && (child == world_link)
                     child = world_name
                 else
-                    child  = sdf_append_name(parent_name, child.name)
+                    child  = sdf_append_name(parent_name, relative_link_names[child])
                 end
 
                 if upper == lower
