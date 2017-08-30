@@ -61,6 +61,20 @@ module Transformer
             tr = conf.example_transformation_for('m::j_post', 'm::j_pre')
             assert_equal Eigen::Vector3.Zero, tr.translation
             assert Eigen::Quaternion.from_angle_axis(1.5, Eigen::Vector3.UnitX).approx?(tr.rotation)
+        describe "handling of the special 'world' link" do
+            it "creates a transform between the world frame and another link in case a joint has 'world' as parent" do
+                conf.load_sdf('model://joint_with_world_link')
+                t = conf.transformation_for 'w', 'root::parent_of_world'
+                assert_equal Eigen::Vector3.Zero, t.translation
+                assert_equal Eigen::Quaternion.Identity, t.rotation
+            end
+            it "creates a transform between the world frame and another link in case a joint has 'world' as child" do
+                conf.load_sdf('model://joint_with_world_link')
+                t = conf.transformation_for 'root::child_of_world', 'w'
+                assert_equal Eigen::Vector3.Zero, t.translation
+                assert_equal Eigen::Quaternion.Identity, t.rotation
+            end
+        end
         end
     end
 end

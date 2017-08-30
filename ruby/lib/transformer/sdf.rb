@@ -14,7 +14,7 @@ module Transformer
 
         def parse_sdf_world(sdf, exclude_models: [], &producer_resolver)
             frames sdf.full_name
-            parse_sdf(sdf, "", sdf.full_name, exclude_models: exclude_models, &producer_resolver)
+            parse_sdf(sdf, "", sdf.full_name, world_name: sdf.full_name, exclude_models: exclude_models, &producer_resolver)
         end
 
         def sdf_append_name(prefix, name)
@@ -23,7 +23,7 @@ module Transformer
             end
         end
 
-        def parse_sdf_model(sdf, prefix = "", parent_name = "", exclude_models: [], &producer_resolver)
+        def parse_sdf_model(sdf, prefix = "", parent_name = "", world_name: nil, exclude_models: [], &producer_resolver)
             full_name = sdf_append_name(prefix, sdf.name)
             frames full_name
 
@@ -35,15 +35,16 @@ module Transformer
                 end
             end
 
-            parse_sdf(sdf, full_name, full_name, exclude_models: exclude_models, &producer_resolver)
+            parse_sdf(sdf, full_name, full_name, world_name: world_name, exclude_models: exclude_models, &producer_resolver)
         end
 
-        def parse_sdf_links_and_joints(sdf, prefix = "", parent_name = "", &producer_resolver)
+        def parse_sdf_links_and_joints(sdf, prefix = "", parent_name = "", world_name: nil, &producer_resolver)
             root_links = Hash.new
             sdf.each_link do |l|
                 root_links[l.name] = l
             end
 
+            world_link = ::SDF::Link::World
             sdf.each_joint do |j|
                 parent = j.parent_link
                 child  = j.child_link
@@ -68,9 +69,18 @@ module Transformer
                     end
                     post2pre = j.transform_for((upper + lower) / 2, axis)
                 end
+                # Handle the special 'world' link
+                if world_name && (parent == world_link)
+                    parent = world_name 
+                else
+                    parent = sdf_append_name(parent_name, parent.name)
+                end
+                if world_name && (child == world_link)
+                    child = world_name
+                else
+                    child  = sdf_append_name(parent_name, child.name)
+                end
 
-                parent = sdf_append_name(parent_name, parent.name)
-                child  = sdf_append_name(parent_name, child.name)
                 if upper == lower
                     static_transform child2parent, child => parent
                 else
@@ -92,18 +102,18 @@ module Transformer
         end
 
         # @api private
-        def parse_sdf(sdf, prefix, parent_name, exclude_models: [], &producer_resolver)
+        def parse_sdf(sdf, prefix, parent_name, world_name: nil, exclude_models: [], &producer_resolver)
             if sdf.respond_to?(:each_world)
                 sdf.each_world { |w| parse_sdf_world(w, exclude_models: exclude_models, &producer_resolver) }
             end
             if sdf.respond_to?(:each_model)
                 sdf.each_model do |m|
-                    next if exclude_models.include?(m.name)
-                    parse_sdf_model(m, prefix, parent_name, exclude_models: exclude_models, &producer_resolver)
+                    next if exclude_models.include?(m.name) || exclude_models.include?(m)
+                    parse_sdf_model(m, prefix, parent_name, world_name: world_name, exclude_models: exclude_models, &producer_resolver)
                 end
             end
             if sdf.respond_to?(:each_link)
-                parse_sdf_links_and_joints(sdf, prefix, parent_name, &producer_resolver)
+                parse_sdf_links_and_joints(sdf, prefix, parent_name, world_name: world_name, &producer_resolver)
             end
         end
     end
