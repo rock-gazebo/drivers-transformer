@@ -4,7 +4,7 @@ module Transformer
     module SDF
         # Load a SDF model or file and convert it into a transformer configuration
         def load_sdf(model, exclude_models: [], &producer_resolver)
-            model = ::SDF::Root.load(model)
+            model = ::SDF::Root.load(model, flatten: false)
             parse_sdf_root(model, exclude_models: exclude_models, &producer_resolver)
         end
 
