@@ -70,8 +70,9 @@ module Transformer
                         joint2model = child2model * joint2child
                         axis = joint2model.rotation.inverse * axis
                     end
-                    post2pre = j.transform_for((upper + lower) / 2, axis)
+                    post2pre = j.transform_for((upper + lower) / 2, nil, axis)
                 end
+
                 # Handle the special 'world' link
                 if world_name && (parent == world_link)
                     parent = world_name 
