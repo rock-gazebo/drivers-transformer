@@ -9,12 +9,22 @@ module Transformer
         end
 
         def parse_sdf_root(sdf, exclude_models: [], &producer_resolver)
-            parse_sdf(sdf, "", "", exclude_models: exclude_models, &producer_resolver)
+            sdf.each_world do |w|
+                parse_sdf_world(w, exclude_models: exclude_models, &producer_resolver)
+            end
+            sdf.each_model do |m|
+                next if exclude_models.include?(m.name) || exclude_models.include?(m)
+                parse_sdf_model(m, "", "", &producer_resolver)
+            end
         end
 
         def parse_sdf_world(sdf, exclude_models: [], &producer_resolver)
-            frames sdf.full_name
-            parse_sdf(sdf, "", sdf.full_name, world_name: sdf.full_name, exclude_models: exclude_models, &producer_resolver)
+            world_full_name = sdf.full_name
+            frames world_full_name
+            sdf.each_model do |m|
+                next if exclude_models.include?(m.name) || exclude_models.include?(m)
+                parse_sdf_model(m, "", world_full_name, world_name: world_full_name, &producer_resolver)
+            end
         end
 
         def sdf_append_name(prefix, name)
@@ -23,40 +33,73 @@ module Transformer
             end
         end
 
-        def parse_sdf_model(sdf, prefix = "", parent_name = "", world_name: nil, exclude_models: [], &producer_resolver)
+        def parse_sdf_model(sdf, prefix = "", parent_name = "", world_name: nil, &producer_resolver)
             full_name = sdf_append_name(prefix, sdf.name)
             frames full_name
 
-            if !parent_name.empty?
+            if !parent_name.empty? && sdf.each_joint.none? { |l| l.parent_link == ::SDF::Link::World || l.child_link == ::SDF::Link::World }
                 if sdf.static?
-                    static_transform(*sdf.pose, sdf.name => parent_name)
+                    static_transform(*sdf.pose, full_name => parent_name)
                 else
-                    example_transform(*sdf.pose, sdf.name => parent_name)
+                    example_transform(*sdf.pose, full_name => parent_name)
                 end
             end
 
-            parse_sdf(sdf, full_name, full_name, world_name: world_name, exclude_models: exclude_models, &producer_resolver)
+            parse_sdf_links_and_joints(sdf, full_name, full_name, world_name: world_name, &producer_resolver)
+        end
+
+        def sdf_link_pose_in_world(m)
+            pose = Eigen::Isometry3.Identity
+            while !m.kind_of?(::SDF::World)
+                pose = m.pose * pose
+                m = m.parent
+            end
+            pose
         end
 
         def parse_sdf_links_and_joints(sdf, prefix = "", parent_name = "", world_name: nil, &producer_resolver)
-            root_links = Hash.new
+            submodel2model = Hash.new
+            submodel2model[sdf] = sdf.pose
+            sdf.each_model_with_name do |submodel, m_name|
+                model_pose = submodel.pose
+
+                m = submodel
+                while m != sdf
+                    m = m.parent
+                    grandchild2child = model_pose
+                    child2parent     = m.pose
+                    model_pose = child2parent * grandchild2child
+                end
+                submodel2model[submodel] = model_pose
+            end
+
             relative_link_names = Hash.new
             sdf.each_link_with_name do |l, l_name|
-                root_links[l_name] = l
                 relative_link_names[l] = l_name
             end
 
             world_link = ::SDF::Link::World
 
-            sdf.each_joint_with_name do |j|
+            if root_link = sdf.each_link.first
+                static_transform(*root_link.pose, sdf_append_name(prefix, relative_link_names[root_link]) => parent_name)
+            end
+
+            sdf.each_joint_with_name do |j, j_name|
                 parent = j.parent_link
                 child  = j.child_link
-                root_links.delete(child.name)
 
-                parent2model = parent.pose
-                child2model  = child.pose
+                if parent == ::SDF::Link::World
+                    child2model  = submodel2model[child.parent] * child.pose
+                    child2parent = sdf_link_pose_in_world(child)
+                elsif child == ::SDF::Link::World
+                    child2model  = Eigen::Isometry3.Identity
+                    child2parent = sdf_link_pose_in_world(parent).inverse
+                else
+                    parent2model = submodel2model[parent.parent] * parent.pose
+                    child2model  = submodel2model[child.parent] * child.pose
+                    child2parent = parent2model.inverse * child2model
+                end
                 joint2child  = j.pose
-                child2parent = parent2model.inverse * child2model
                 joint2parent = child2parent * joint2child
 
                 if j.type != 'fixed'
@@ -75,49 +118,29 @@ module Transformer
 
                 # Handle the special 'world' link
                 if world_name && (parent == world_link)
-                    parent = world_name 
+                    parent_frame_name = world_name 
                 else
-                    parent = sdf_append_name(parent_name, relative_link_names[parent])
+                    parent_frame_name = sdf_append_name(parent_name, relative_link_names[parent])
                 end
                 if world_name && (child == world_link)
-                    child = world_name
+                    child_frame_name = world_name
                 else
-                    child  = sdf_append_name(parent_name, relative_link_names[child])
+                    child_frame_name  = sdf_append_name(parent_name, relative_link_names[child])
                 end
 
                 if upper == lower
-                    static_transform child2parent, child => parent
+                    static_transform child2parent, child_frame_name => parent_frame_name
                 else
-                    joint_pre  = sdf_append_name(parent_name, "#{j.name}_pre")
-                    joint_post = sdf_append_name(parent_name, "#{j.name}_post")
+                    joint_pre  = sdf_append_name(parent_name, "#{j_name}_pre")
+                    joint_post = sdf_append_name(parent_name, "#{j_name}_post")
                     register_joint(joint_post, joint_pre, j)
-                    static_transform(joint2child, joint_post => child)
-                    static_transform(joint2parent, joint_pre => parent)
+                    static_transform(joint2child, joint_post => child_frame_name)
+                    static_transform(joint2parent, joint_pre => parent_frame_name)
                     if producer_resolver && (p = producer_resolver.call(j))
                         dynamic_transform p, joint_post => joint_pre
                     end
                     example_transform post2pre, joint_post => joint_pre
                 end
-            end
-
-            root_links.each_value do |l|
-                static_transform(*l.pose, sdf_append_name(prefix, l.name) => parent_name)
-            end
-        end
-
-        # @api private
-        def parse_sdf(sdf, prefix, parent_name, world_name: nil, exclude_models: [], &producer_resolver)
-            if sdf.respond_to?(:each_world)
-                sdf.each_world { |w| parse_sdf_world(w, exclude_models: exclude_models, &producer_resolver) }
-            end
-            if sdf.respond_to?(:each_model)
-                sdf.each_model do |m|
-                    next if exclude_models.include?(m.name) || exclude_models.include?(m)
-                    parse_sdf_model(m, prefix, parent_name, world_name: world_name, exclude_models: exclude_models, &producer_resolver)
-                end
-            end
-            if sdf.respond_to?(:each_link)
-                parse_sdf_links_and_joints(sdf, prefix, parent_name, world_name: world_name, &producer_resolver)
             end
         end
     end

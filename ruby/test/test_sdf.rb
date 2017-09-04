@@ -91,17 +91,66 @@ module Transformer
         end
 
         describe "handling of the special 'world' link" do
-            it "creates a transform between the world frame and another link in case a joint has 'world' as parent" do
-                conf.load_sdf('model://joint_with_world_link')
-                t = conf.transformation_for 'w', 'root::parent_of_world'
-                assert_equal Eigen::Vector3.Zero, t.translation
-                assert_equal Eigen::Quaternion.Identity, t.rotation
+            describe "a joint with the world link as child" do
+                before do
+                    load_sdf(<<-EOSDF)
+                    <sdf><world name="w"><model name="m">
+                         <pose>1 2 3 0 0 0</pose>
+                         <link name="l">
+                           <pose>2 3 4 0 0 0</pose>
+                         </link>
+                         <joint name="world_link_as_child" type="fixed">
+                            <parent>l</parent>
+                            <child>world</child>
+                         </joint>
+                    </model></world></sdf>
+                    EOSDF
+                end
+
+                it "creates a transform between the world frame and the parent link" do
+                    t = conf.transformation_for 'w', 'm::l'
+                    assert_kind_of StaticTransform, t
+                end
+                it "uses the world pose of the link to setup the transformation" do
+                    t = conf.transformation_for 'w', 'm::l'
+                    assert_eigen_approx Eigen::Vector3.new(-3, -5, -7), t.translation
+                    assert_equal Eigen::Quaternion.Identity, t.rotation
+                end
+                it "does not setup a transform between the model and the world" do
+                    refute conf.has_transform?('w', 'm')
+                    refute conf.has_transform?('m', 'w')
+                end
             end
-            it "creates a transform between the world frame and another link in case a joint has 'world' as child" do
-                conf.load_sdf('model://joint_with_world_link')
-                t = conf.transformation_for 'root::child_of_world', 'w'
-                assert_equal Eigen::Vector3.Zero, t.translation
-                assert_equal Eigen::Quaternion.Identity, t.rotation
+
+            describe "a joint with the world link as parent" do
+                before do
+                    load_sdf(<<-EOSDF)
+                    <sdf><world name="w"><model name="m">
+                         <pose>1 2 3 0 0 0</pose>
+                         <link name="l">
+                           <pose>2 3 4 0 0 0</pose>
+                         </link>
+                         <joint name="world_link_as_child" type="fixed">
+                            <parent>world</parent>
+                            <child>l</child>
+                         </joint>
+                    </model></world></sdf>
+                    EOSDF
+                end
+
+                it "creates a transform between the world frame and another link in case a joint has 'world' as child" do
+                    t = conf.transformation_for 'm::l', 'w'
+                    assert_kind_of StaticTransform, t
+                end
+                it "uses the world pose of the link to setup the transformation" do
+                    t = conf.transformation_for 'm::l', 'w'
+                    assert_eigen_approx Eigen::Vector3.new(3, 5, 7), t.translation
+                    assert_equal Eigen::Quaternion.Identity, t.rotation
+                end
+                it "does not setup a transform between the model and the world" do
+                    refute conf.has_transform?('w', 'm')
+                    refute conf.has_transform?('m', 'w')
+                end
             end
         end
 
@@ -116,6 +165,32 @@ module Transformer
                 assert_equal 'root::l', t.from
                 assert_equal 'root::submodel::l', t.to
             end
+            it "applies the pose of the submodel onto the links" do
+                load_sdf(<<-EOSDF)
+                <sdf><world name="w">
+                <model name="m">
+                   <pose>1 2 3 0 0 0</pose>
+                   <link name="l" />
+                   <model name="subm">
+                      <pose>2 3 4 0 0 0</pose>
+                      <link name="l">
+                        <pose>3 4 5 0 0 0</pose>
+                      </link>
+                   </model>
+                   <joint name="j" type="fixed">
+                      <parent>l</parent>
+                      <child>subm::l</child>
+                   </joint>
+                </model></world></sdf>
+                EOSDF
+                t = conf.transformation_for('m::subm::l', 'm::l')
+                assert_equal Eigen::Vector3.new(5, 7, 9), t.translation
+            end
+        end
+
+        def load_sdf(sdf_xml)
+            sdf = ::SDF::Root.from_xml_string(sdf_xml)
+            conf.parse_sdf_root(sdf)
         end
     end
 end
