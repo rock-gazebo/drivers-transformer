@@ -186,6 +186,40 @@ module Transformer
                 t = conf.transformation_for('m::subm::l', 'm::l')
                 assert_equal Eigen::Vector3.new(5, 7, 9), t.translation
             end
+            it "applies the pose of the submodels recursively" do
+                load_sdf(<<-EOSDF)
+                <sdf><world name="w">
+                <model name="m">
+                   <pose>1 2 3 0 0 0</pose>
+                   <model name="subm">
+                      <pose>2 3 4 0 0 0</pose>
+                      <model name="subm2">
+                         <link name="l">
+                           <pose>3 4 5 0 0 0</pose>
+                         </link>
+                      </model>
+                   </model>
+                </model></world></sdf>
+                EOSDF
+               t = conf.transformation_for('m::subm::subm2::l', 'm')
+               assert_eigen_approx Eigen::Vector3.new(5, 7, 9), t.translation
+            end
+            it "applies the pose of the first link, even when there is no link on the parent model" do
+                load_sdf(<<-EOSDF)
+                <sdf><world name="w">
+                <model name="m">
+                   <pose>1 2 3 0 0 0</pose>
+                   <model name="subm">
+                      <pose>2 3 4 0 0 0</pose>
+                      <link name="l">
+                        <pose>3 4 5 0 0 0</pose>
+                      </link>
+                   </model>
+                </model></world></sdf>
+                EOSDF
+                t = conf.transformation_for('m::subm::l', 'm')
+                assert_equal Eigen::Vector3.new(5, 7, 9), t.translation
+            end
         end
 
         def load_sdf(sdf_xml)

@@ -56,6 +56,14 @@ module Transformer
             end
             pose
         end
+        def sdf_link_pose_in_model(m, sdf)
+            pose = Eigen::Isometry3.Identity
+            while m!=sdf
+                pose = m.pose * pose
+                m = m.parent
+            end
+            pose
+        end
 
         def parse_sdf_links_and_joints(sdf, prefix = "", parent_name = "", world_name: nil, &producer_resolver)
             submodel2model = Hash.new
@@ -81,7 +89,7 @@ module Transformer
             world_link = ::SDF::Link::World
 
             if root_link = sdf.each_link.first
-                static_transform(*root_link.pose, sdf_append_name(prefix, relative_link_names[root_link]) => parent_name)
+                static_transform(*sdf_link_pose_in_model(root_link,sdf), sdf_append_name(prefix, relative_link_names[root_link]) => parent_name)
             end
 
             sdf.each_joint_with_name do |j, j_name|
