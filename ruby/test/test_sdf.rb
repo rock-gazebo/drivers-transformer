@@ -70,6 +70,21 @@ module Transformer
             assert 'producer', tr.producer
         end
 
+        it "declares even frames that are not linked to the root frame through joints" do
+            load_sdf(<<-EOSDF)
+            <sdf><world name="w">
+            <model name="m"><link name="root" />
+              <link name="l" />
+              <model name="subm"><link name="l" />
+                <model name="subsubm"><link name="l" />
+                </model>
+              </model>
+            </model></world></sdf>
+            EOSDF
+            assert conf.has_frame?('m::l')
+            assert conf.has_frame?('m::subm::l')
+            assert conf.has_frame?('m::subm::subsubm::l')
+        end
 
         describe "example transform for revolute joints" do
             it "provides an example transform that matches the middle of the axis range " do

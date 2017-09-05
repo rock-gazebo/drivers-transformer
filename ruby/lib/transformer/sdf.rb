@@ -83,6 +83,7 @@ module Transformer
 
             relative_link_names = Hash.new
             sdf.each_link_with_name do |l, l_name|
+                frames sdf_append_name(prefix, l_name)
                 relative_link_names[l] = l_name
             end
 
