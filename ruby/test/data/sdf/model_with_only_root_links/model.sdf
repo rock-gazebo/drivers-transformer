@@ -3,9 +3,9 @@
 <sdf>
     <world name="w">
         <model name="m">
-            <pose>0 1 2 0 0 1</pose>
+            <pose>0 1 2 0 0 0</pose>
             <link name="root_link">
-                <pose>1 2 3 0 0 2</pose>
+                <pose>1 2 3 0 0 1</pose>
             </link>
         </model>
     </world>

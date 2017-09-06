@@ -27,27 +27,25 @@ module Transformer
                 conf.frames.to_a.sort
         end
 
-        it "creates an example transform between the model frame and the world using the model pose" do
+        it "creates an example transform between the model's canonical link frame and the world using the model pose" do
             conf.load_sdf('model://model_with_only_root_links')
-            tr = conf.example_transform_for('m', 'w')
-            assert Eigen::Vector3.new(0, 1, 2).approx?(tr.translation)
+            tr = conf.example_transform_for('m::root_link', 'w')
+            assert_eigen_approx Eigen::Vector3.new(1, 3, 5), tr.translation
             assert Eigen::Quaternion.from_angle_axis(1, Eigen::Vector3.UnitZ).approx?(tr.rotation)
         end
 
-        it "creates an static transform between the model frame and the world using the model pose if the model is static" do
+        it "creates an static transform between the model's canonical link and the world using the model pose if the model is static" do
             conf.load_sdf('model://static_model')
-            tr = conf.transform_for('m', 'w')
-            assert Eigen::Vector3.new(0, 1, 2).approx?(tr.translation)
+            tr = conf.transform_for('m::root_link', 'w')
+            assert_eigen_approx Eigen::Vector3.new(1, 3, 5), tr.translation
             assert Eigen::Quaternion.from_angle_axis(1, Eigen::Vector3.UnitZ).approx?(tr.rotation)
         end
 
-        it "creates a static transform between root links and the model" do
+        it "creates a static transform between canonical links and the model" do
             conf.load_sdf('model://model_with_only_root_links')
             tr = conf.transformation_for('m::root_link', 'm')
-            assert Eigen::Vector3.new(1, 2, 3).
-                approx?(tr.translation)
-            assert Eigen::Quaternion.from_angle_axis(2, Eigen::Vector3.UnitZ).
-                approx?(tr.rotation)
+            assert_equal Eigen::Vector3.Zero, tr.translation
+            assert_equal Eigen::Quaternion.Identity, tr.rotation
         end
 
         it "creates static transforms between the links and the joints" do
@@ -111,9 +109,14 @@ module Transformer
                     load_sdf(<<-EOSDF)
                     <sdf><world name="w"><model name="m">
                          <pose>1 2 3 0 0 0</pose>
+                         <link name="root" />
                          <link name="l">
                            <pose>2 3 4 0 0 0</pose>
                          </link>
+                         <joint name="root_to_l" type="fixed">
+                            <parent>root</parent>
+                            <child>l</child>
+                         </joint>
                          <joint name="world_link_as_child" type="fixed">
                             <parent>l</parent>
                             <child>world</child>
@@ -132,8 +135,8 @@ module Transformer
                     assert_equal Eigen::Quaternion.Identity, t.rotation
                 end
                 it "does not setup a transform between the model and the world" do
-                    refute conf.has_transform?('w', 'm')
-                    refute conf.has_transform?('m', 'w')
+                    refute conf.has_transform?('w', 'm::root')
+                    refute conf.has_transform?('m::root', 'w')
                 end
             end
 
@@ -142,9 +145,14 @@ module Transformer
                     load_sdf(<<-EOSDF)
                     <sdf><world name="w"><model name="m">
                          <pose>1 2 3 0 0 0</pose>
+                         <link name="root" />
                          <link name="l">
                            <pose>2 3 4 0 0 0</pose>
                          </link>
+                         <joint name="root_to_l" type="fixed">
+                            <parent>root</parent>
+                            <child>l</child>
+                         </joint>
                          <joint name="world_link_as_child" type="fixed">
                             <parent>world</parent>
                             <child>l</child>
@@ -163,8 +171,8 @@ module Transformer
                     assert_equal Eigen::Quaternion.Identity, t.rotation
                 end
                 it "does not setup a transform between the model and the world" do
-                    refute conf.has_transform?('w', 'm')
-                    refute conf.has_transform?('m', 'w')
+                    refute conf.has_transform?('w', 'm::root')
+                    refute conf.has_transform?('m::root', 'w')
                 end
             end
         end
@@ -206,6 +214,7 @@ module Transformer
                 <sdf><world name="w">
                 <model name="m">
                    <pose>1 2 3 0 0 0</pose>
+                   <link name="l" />
                    <model name="subm">
                       <pose>2 3 4 0 0 0</pose>
                       <model name="subm2">
@@ -214,26 +223,14 @@ module Transformer
                          </link>
                       </model>
                    </model>
+                   <joint name="j" type="fixed">
+                     <parent>l</parent>
+                     <child>subm::subm2::l</child>
+                   </joint>
                 </model></world></sdf>
                 EOSDF
-               t = conf.transformation_for('m::subm::subm2::l', 'm')
+               t = conf.transformation_for('m::subm::subm2::l', 'm::l')
                assert_eigen_approx Eigen::Vector3.new(5, 7, 9), t.translation
-            end
-            it "applies the pose of the first link, even when there is no link on the parent model" do
-                load_sdf(<<-EOSDF)
-                <sdf><world name="w">
-                <model name="m">
-                   <pose>1 2 3 0 0 0</pose>
-                   <model name="subm">
-                      <pose>2 3 4 0 0 0</pose>
-                      <link name="l">
-                        <pose>3 4 5 0 0 0</pose>
-                      </link>
-                   </model>
-                </model></world></sdf>
-                EOSDF
-                t = conf.transformation_for('m::subm::l', 'm')
-                assert_equal Eigen::Vector3.new(5, 7, 9), t.translation
             end
         end
 

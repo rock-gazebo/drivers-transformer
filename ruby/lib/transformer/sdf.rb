@@ -37,15 +37,27 @@ module Transformer
             full_name = sdf_append_name(prefix, sdf.name)
             frames full_name
 
-            if !parent_name.empty? && sdf.each_joint.none? { |l| l.parent_link == ::SDF::Link::World || l.child_link == ::SDF::Link::World }
-                if sdf.static?
-                    static_transform(*sdf.pose, full_name => parent_name)
-                else
-                    example_transform(*sdf.pose, full_name => parent_name)
+            parse_sdf_links_and_joints(sdf, full_name, full_name, world_name: world_name, &producer_resolver)
+
+            if world_name
+                begin
+                    TransformationManager.new(self).resolve_static_chain(full_name, world_name)
+                rescue TransformationNotFound
+                    if canonical = sdf.canonical_link
+                        frame_name = sdf_append_name(full_name, canonical.name)
+                        pose = sdf_link_pose_in_world(canonical)
+                    else
+                        frame_name = full_name
+                        pose = sdf.pose
+                    end
+
+                    if sdf.static?
+                        static_transform(*pose, frame_name => parent_name)
+                    else
+                        example_transform(*pose, frame_name => parent_name)
+                    end
                 end
             end
-
-            parse_sdf_links_and_joints(sdf, full_name, full_name, world_name: world_name, &producer_resolver)
         end
 
         def sdf_link_pose_in_world(m)
@@ -67,18 +79,9 @@ module Transformer
 
         def parse_sdf_links_and_joints(sdf, prefix = "", parent_name = "", world_name: nil, &producer_resolver)
             submodel2model = Hash.new
-            submodel2model[sdf] = sdf.pose
+            submodel2model[sdf] = Eigen::Isometry3.Identity
             sdf.each_model_with_name do |submodel, m_name|
-                model_pose = submodel.pose
-
-                m = submodel
-                while m != sdf
-                    m = m.parent
-                    grandchild2child = model_pose
-                    child2parent     = m.pose
-                    model_pose = child2parent * grandchild2child
-                end
-                submodel2model[submodel] = model_pose
+                submodel2model[submodel] = sdf_link_pose_in_model(submodel, sdf)
             end
 
             relative_link_names = Hash.new
@@ -89,8 +92,8 @@ module Transformer
 
             world_link = ::SDF::Link::World
 
-            if root_link = sdf.each_link.first
-                static_transform(*sdf_link_pose_in_model(root_link,sdf), sdf_append_name(prefix, relative_link_names[root_link]) => parent_name)
+            if canonical_link = sdf.canonical_link
+                static_transform(Eigen::Vector3.Zero, sdf_append_name(prefix, canonical_link.name) => parent_name)
             end
 
             sdf.each_joint_with_name do |j, j_name|
