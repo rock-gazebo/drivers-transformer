@@ -536,12 +536,14 @@ module Transformer
 
             transforms = Hash.new
             @transforms.each do |(from, to), tr|
-                transforms[[tr.from, tr.to]] = tr.rename_frames(mapping).freeze
+                tr = tr.rename_frames(mapping).freeze
+                transforms[[tr.from, tr.to]] = tr
             end
 
             example_transforms = Hash.new
             @example_transforms.each do |(from, to), tr|
-                example_transforms[[tr.from, tr.to]] = tr.rename_frames(mapping).freeze
+                tr = tr.rename_frames(mapping).freeze
+                example_transforms[[tr.from, tr.to]] = tr
             end
 
             @frames = frames
@@ -710,12 +712,17 @@ module Transformer
             tr
         end
 
+        # @deprecated for backward compatibility only, renamed to {#has_transform?} for consistency with the rest of the API
+        def has_transformation?(from, to)
+            has_transform?(from, to)
+        end
+
         # Checks if a transformation between the provided frames exist.
         #
         # It will return true if such a transformation has been registered,
         # false otherwise, and raises ArgumentError if either +from+ or +to+ are
         # not registered frames.
-        def has_transformation?(from, to)
+        def has_transform?(from, to)
             result = transforms.has_key?([from, to])
 
             if !result
@@ -728,10 +735,15 @@ module Transformer
             result
         end
 
+        # @deprecated for backward compatibility only, renamed to {#transform_for} for consistency with the rest of the API
+        def transformation_for(from, to)
+            transform_for(from, to)
+        end
+
         # Returns the transformation object that represents the from -> to
         # transformation, if there is one. If none is found, raises
         # ArgumentError
-        def transformation_for(from, to)
+        def transform_for(from, to)
             result = transforms[[from, to]]
             if !result
                 if !has_frame?(from)

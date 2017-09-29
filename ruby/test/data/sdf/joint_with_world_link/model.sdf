@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+
+<sdf>
+    <world name="w">
+        <model name="root">
+            <link name="l" />
+            <link name="parent_of_world" />
+            <link name="child_of_world" />
+
+            <model name="submodel">
+                <link name="l" />
+            </model>
+
+            <joint name="joint_with_world_as_child" type="fixed">
+                <parent>parent_of_world</parent>
+                <child>world</child>
+            </joint>
+            <joint name="joint_with_world_as_parent" type="fixed">
+                <parent>world</parent>
+                <child>child_of_world</child>
+            </joint>
+            <joint name="attach_submodel_to_parent" type="fixed">
+                <parent>submodel::l</parent>
+                <child>l</child>
+            </joint>
+        </model>
+    </world>
+</sdf>
+

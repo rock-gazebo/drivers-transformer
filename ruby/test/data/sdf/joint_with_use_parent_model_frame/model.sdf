@@ -4,16 +4,16 @@
     <world name="w">
         <model name="m">
             <link name="root_link">
-                <pose>1 2 3 90 0 0</pose>
+                <pose>1 2 3 0 0 0</pose>
             </link>
             <link name="child_link">
-                <pose>1 2 3 90 0 0</pose>
+                <pose>1 2 3 0 0 1.5708</pose>
             </link>
             <joint name='j' type='revolute'>
-                <pose>1 2 3 0 0 2</pose>
                 <parent>root_link</parent>
                 <child>child_link</child>
                 <axis>
+                    <use_parent_model_frame>true</use_parent_model_frame>
                     <xyz>1 0 0</xyz>
                     <limit>
                         <upper>0.2</upper>

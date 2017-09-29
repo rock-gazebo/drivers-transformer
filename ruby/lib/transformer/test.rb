@@ -45,6 +45,12 @@ module Transformer
             super
             # Teardown code for all the tests
         end
+
+        def assert_eigen_approx(expected, actual, msg = nil)
+            if !expected.approx?(actual)
+                flunk(msg || "expected #{actual} to be approximately equal to #{expected}")
+            end
+        end
     end
 end
 
