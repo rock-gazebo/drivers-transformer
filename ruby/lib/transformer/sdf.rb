@@ -44,7 +44,7 @@ module Transformer
                     TransformationManager.new(self).resolve_static_chain(full_name, world_name)
                 rescue TransformationNotFound
                     if canonical = sdf.canonical_link
-                        frame_name = sdf_append_name(full_name, canonical.name)
+                        frame_name = canonical.full_name
                         pose = sdf_link_pose_in_world(canonical)
                     else
                         frame_name = full_name
