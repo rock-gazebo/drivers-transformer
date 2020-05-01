@@ -97,9 +97,14 @@ end
 
 class TC_Transformer < Minitest::Test
     attr_reader :trsf, :transforms
-    def conf; trsf.conf end
+
+    def conf
+        trsf.conf
+    end
 
     def setup
+        super
+
         @trsf = Transformer::TransformationManager.new
         conf.frames "body", "servo_low", "servo_high", "laser", "camera", "camera_optical"
 
