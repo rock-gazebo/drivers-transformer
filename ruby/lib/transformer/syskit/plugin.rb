@@ -17,7 +17,7 @@ module Transformer
                     # ignore here.
                     next
                 end
-                
+
                 # Register transformation producers that are connected to
                 # some of our transformation input ports
                 self_producers = Hash.new
@@ -179,7 +179,7 @@ module Transformer
                 task.requirements.transformer.each_static_transform do |static|
                     static_transforms[[static.from, static.to]] = static
                 end
-                
+
                 tr = task.model.transformer
                 task_name = task.orocos_name
                 tr.each_annotated_port do |port, frame_name|
@@ -292,16 +292,17 @@ module Transformer
 
         def self.enable
             Roby.app.add_plugin 'syskit-transformer', RobyAppPlugin
+            Roby.app.using_task_library "transformer"
 
             # Maintain a transformer broadcaster on the main engine
             Roby::ExecutionEngine.add_propagation_handler(description: 'syskit-transformer transformer broadcaster start') do |plan|
-		if Syskit.conf.transformer_broadcaster_enabled?
-		    if !plan.execution_engine.quitting? && plan.find_tasks(OroGen::Transformer::Task).not_finished.empty?
-                        # The broadcaster will be updated at most once per
-                        # execution cycle
-                        plan.add_mission_task(OroGen::Transformer::Task.to_instance_requirements.period(0.05))
-		    end
-		end
+            if Syskit.conf.transformer_broadcaster_enabled?
+                if !plan.execution_engine.quitting? && plan.find_tasks(OroGen.transformer.Task).not_finished.empty?
+                    # The broadcaster will be updated at most once per
+                    # execution cycle
+                    plan.add_mission_task(OroGen.transformer.Task.to_instance_requirements.period(0.05))
+                end
+            end
             end
 
             Syskit::NetworkGeneration::Engine.register_instanciation_postprocessing do |engine, plan|
