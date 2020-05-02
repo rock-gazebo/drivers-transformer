@@ -6,6 +6,7 @@ describe Transformer::SyskitPlugin do
     before do
         Roby.app.import_types_from 'base'
         Roby.app.import_types_from 'transformer'
+        Roby.app.using_task_library 'transformer'
         Syskit.conf.transformer_warn_about_unset_frames = false
 
         @transform_producer_m = Syskit::TaskContext.new_submodel name: 'TransformProducer' do
