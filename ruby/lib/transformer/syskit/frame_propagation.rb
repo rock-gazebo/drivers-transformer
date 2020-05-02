@@ -227,7 +227,7 @@ module Transformer
         class PortAssociationMismatch < RuntimeError
             # The problematic endpoint, as a [task, port_name] pair
             attr_reader :endpoint
-            # The other side of the problematic connection(s) 
+            # The other side of the problematic connection(s)
             attr_reader :connections
             # The association type expected by +endpoint+. Can either be 'frame'
             # for an association between a port and a frame, and 'transform' for
