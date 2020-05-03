@@ -292,7 +292,6 @@ module Transformer
 
         def self.enable
             Roby.app.add_plugin 'syskit-transformer', RobyAppPlugin
-            Roby.app.using_task_library "transformer"
 
             # Maintain a transformer broadcaster on the main engine
             Roby::ExecutionEngine.add_propagation_handler(description: 'syskit-transformer transformer broadcaster start') do |plan|
