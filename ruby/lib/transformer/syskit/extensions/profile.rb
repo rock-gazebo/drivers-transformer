@@ -31,8 +31,8 @@ module Transformer
             end
         end
 
-        def transformer
-            if !@transformer
+        def transformer(&block)
+            unless @transformer
                 @transformer = Configuration.new(self)
                 all_used_profiles.each do |profile, tags|
                     if profile.has_transformer?
@@ -40,9 +40,8 @@ module Transformer
                     end
                 end
             end
-            if block_given?
-                @transformer.instance_eval(&proc)
-            end
+
+            @transformer.instance_eval(&block) if block_given?
             @transformer
         end
 

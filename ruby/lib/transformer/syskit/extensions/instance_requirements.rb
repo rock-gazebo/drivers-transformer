@@ -13,13 +13,12 @@ module Transformer
         # Note that it is passed on to children
         attr_writer :transformer
 
-        def transformer
+        def transformer(&block)
             @transformer ||= SyskitConfiguration.new
-            if block_given?
-                @transformer.instance_eval(&proc)
-                return self
-            else return @transformer
-            end
+            return @transformer unless block
+
+            @transformer.instance_eval(&block)
+            self
         end
 
         # Declare frame mappings
