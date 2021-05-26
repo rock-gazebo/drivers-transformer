@@ -165,28 +165,36 @@ module Transformer
         end
 
         # Applies the selected frames to the task properties
-        def configure
+        def update_properties
             super if defined? super
-            if tr = self.model.transformer
-                selected_frames.each do |local_frame, global_frame|
-                    if has_property?("#{local_frame}_frame")
-                        property("#{local_frame}_frame").write(global_frame)
-                    end
-                end
 
-                if has_property?(:static_transformations)
-                    self.properties.static_transformations = static_transforms.map do |trsf|
-                        rbs = Types.base.samples.RigidBodyState.new
-                        rbs.zero!
-                        rbs.time = Time.now
-                        rbs.sourceFrame = trsf.from
-                        rbs.targetFrame = trsf.to
-                        rbs.position = trsf.translation
-                        rbs.orientation = trsf.rotation
-                        rbs
-                    end
+            return unless (tr = self.model.transformer)
+
+            selected_frames.each do |local_frame, global_frame|
+                if has_property?("#{local_frame}_frame")
+                    property("#{local_frame}_frame").write(global_frame)
                 end
             end
+
+            if has_property?(:static_transformations)
+                self.properties.static_transformations = static_transforms.map do |trsf|
+                    rbs = Types.base.samples.RigidBodyState.new
+                    rbs.zero!
+                    rbs.time = Time.now
+                    rbs.sourceFrame = trsf.from
+                    rbs.targetFrame = trsf.to
+                    rbs.position = trsf.translation
+                    rbs.orientation = trsf.rotation
+                    rbs
+                end
+            end
+        end
+
+        def configure
+            super
+
+            # Backward compatibility with older Syskit versions
+            update_properties unless model.respond_to?(:use_update_properties?)
         end
     end
 
