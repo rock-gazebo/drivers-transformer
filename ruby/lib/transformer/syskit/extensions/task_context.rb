@@ -190,11 +190,11 @@ module Transformer
             end
         end
 
-        def configure
-            super
-
-            # Backward compatibility with older Syskit versions
-            update_properties unless model.respond_to?(:use_update_properties?)
+        unless Syskit::TaskContext.respond_to?(:use_update_properties?)
+            def configure
+                super
+                update_properties
+            end
         end
     end
 
