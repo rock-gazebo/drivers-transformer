@@ -6,22 +6,48 @@ module Transformer
         def validate_generated_network
             super
 
-            if Syskit.conf.transformer_enabled?
-                plan.find_local_tasks(Syskit::TaskContext).each do |task|
-                    next if !(tr = task.model.transformer)
+            return unless Syskit.conf.transformer_enabled?
 
-                    tr.each_needed_transformation do |transform|
-                        if !task.selected_frames[transform.from]
-                            raise MissingFrame, "could not find a frame assignment for #{transform.from} in #{task}"
-                        end
-                        if !task.selected_frames[transform.to]
-                            raise MissingFrame, "could not find a frame assignment for #{transform.to} in #{task}"
-                        end
-                    end
+            transformer_validate_all_frames_assigned
+            transformer_validate_no_missing_transform
+        end
+
+        def transformer_validate_all_frames_assigned
+            plan.find_local_tasks(Syskit::TaskContext).each do |task|
+                next unless (tr = task.model.transformer)
+
+                tr.each_needed_transformation do |transform|
+                    transformer_validate_frame_assigned(task, transform.from)
+                    transformer_validate_frame_assigned(task, transform.to)
                 end
             end
         end
 
+        def transformer_validate_frame_assigned(task, frame_name)
+            return if task.selected_frames[frame_name]
+
+            raise MissingFrame,
+                  "could not find a frame assignment for #{frame_name} in #{task}"
+        end
+
+        def transformer_validate_no_missing_transform
+            plan.find_local_tasks(Transformer::SyskitPlugin::MissingTransform)
+                .each do |placeholder_task|
+                    task = placeholder_task.parent_task
+                    task_from = placeholder_task.task_from
+                    from = placeholder_task.from
+                    task_to = placeholder_task.task_to
+                    to = placeholder_task.to
+                    e = placeholder_task.original_exception
+                    raise InvalidChain.new(
+                        placeholder_task.transformer,
+                        task, task_from, from, task_to, to, e
+                    ),
+                          "cannot find a transformation chain to produce "\
+                          "#{from} => #{to} for #{task} (task-local frames: "\
+                          "#{task_from} => #{task_to}): #{e.message}", e.backtrace
+                end
+        end
 
         def validate_abstract_network
             super

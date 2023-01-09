@@ -110,6 +110,68 @@ describe Transformer::SyskitPlugin do
             cmp.consumer_child.selected_frames
     end
 
+    it "marks invalid chains in the plan with special placeholders, raising only during "\
+       "validation" do
+        task_m =
+            data_consumer_m
+            .use_frames("object" => "object_global", "world" => "world_global")
+            .transformer { frames "object_global", "world_global" }
+
+        task = syskit_deploy(
+            task_m,
+            validate_generated_network: false, compute_deployments: false,
+            compute_policies: false, validate_deployed_network: false
+        )
+        placeholder_task, = task.each_child.first
+        assert(placeholder_task)
+        assert_equal "object", placeholder_task.task_from
+        assert_equal "world", placeholder_task.task_to
+        assert_equal "object_global", placeholder_task.from
+        assert_equal "world_global", placeholder_task.to
+        refute_nil placeholder_task.transformer
+    end
+
+    it "raises if a chain cannot be resolved" do
+        task_m =
+            data_consumer_m
+            .use_frames("object" => "object_global", "world" => "world_global")
+            .transformer { frames "object_global", "world_global" }
+
+        # Yuk, yes, need to fix syskit_deploy to raise the actual error
+        e = assert_raises(Roby::Test::ExecutionExpectations::UnexpectedErrors) do
+            syskit_deploy(task_m)
+        end
+        planning_failed = e.each_execution_exception.find do |e|
+            e.exception.kind_of?(Roby::PlanningFailedError)
+        end
+        invalid_chain_e = planning_failed.exception.each_original_exception.first
+        assert_kind_of Transformer::InvalidChain, invalid_chain_e
+
+        expected_m = "cannot find a transformation chain to produce object_global => "\
+                     "world_global for DataConsumer.* \\\(task-local frames: object => "\
+                     "world\\\): no transformation from 'object_global' to "\
+                     "'world_global' available"
+        assert_match Regexp.new(expected_m), invalid_chain_e.message
+    end
+
+    it "instanciates dynamic producers" do
+        transform_producer_m = self.transform_producer_m
+        syskit_stub_requirements(transform_producer_m)
+        task_m = self.data_consumer_m.
+            use_frames('object' => 'object_global', 'world' => 'world_global').
+            transformer do
+                dynamic_transform transform_producer_m,
+                    "object_global" => "world_global"
+            end
+
+        task = syskit_stub_and_deploy(task_m)
+        producer = task.child_from_role("transformer_object_global2world_global")
+        assert_kind_of transform_producer_m, producer
+        assert_equal Hash['producer_object' => 'object_global', 'producer_world' => 'world_global'],
+            producer.selected_frames
+        assert producer.transform_port.connected_to?(task.dynamic_transformations_port)
+    end
+
     it "instanciates dynamic producers" do
         transform_producer_m = self.transform_producer_m
         syskit_stub_requirements(transform_producer_m)

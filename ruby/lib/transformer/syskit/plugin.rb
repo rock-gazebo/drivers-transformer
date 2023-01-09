@@ -1,5 +1,12 @@
 module Transformer
     module SyskitPlugin
+        class MissingTransform < Syskit::Component
+            attr_accessor :from, :to
+            attr_accessor :task_from, :task_to
+            attr_accessor :original_exception
+            attr_accessor :transformer
+        end
+
         def self.compute_required_transformations(manager, task)
             static_transforms  = Hash.new
             dynamic_transforms = Hash.new { |h, k| h[k] = Array.new }
@@ -45,21 +52,35 @@ module Transformer
                     Transformer.debug "  with local producers: #{self_producers}"
                     break
                 end
-                chain =
-                    begin
-                        manager.transformation_chain(from, to, self_producers)
-                    rescue Exception => e
-                        raise InvalidChain.new(manager, task, trsf.from, from, trsf.to, to, e),
-                            "cannot find a transformation chain to produce #{from} => #{to} for #{task} (task-local frames: #{trsf.from} => #{trsf.to}): #{e.message}", e.backtrace
-                    end
-                Transformer.log_pp(:debug, chain)
 
-                static, dynamic = chain.partition
-                Transformer.debug do
-                    Transformer.debug "#{static.to_a.size} static transformations"
-                    Transformer.debug "#{dynamic.to_a.size} dynamic transformations"
-                    break
+                begin
+                    chain = manager.transformation_chain(from, to, self_producers)
+                    Transformer.log_pp(:debug, chain)
+                    static, dynamic = chain.partition
+
+                    Transformer.debug do
+                        Transformer.debug "#{static.to_a.size} static transformations"
+                        Transformer.debug "#{dynamic.to_a.size} dynamic transformations"
+                        break
+                    end
+                rescue Exception => e
+                    placeholder = MissingTransform.instanciate(task.plan)
+                    task.depends_on placeholder, role: "transform_#{from}2#{to}"
+
+                    placeholder.task_from = trsf.from
+                    placeholder.task_to = trsf.to
+                    placeholder.from = from
+                    placeholder.to = to
+                    placeholder.original_exception = e
+                    placeholder.transformer = manager
+                    static = []
+                    dynamic = []
+
+                    Transformer.debug(
+                        "missing transform chain from #{from} to #{to} for #{task}"
+                    )
                 end
+
 
                 static.each do |trsf|
                     static_transforms[[trsf.from, trsf.to]] = trsf
