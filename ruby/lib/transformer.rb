@@ -335,22 +335,28 @@ module Transformer
 
             known_transforms = Set.new
             all_transforms = Hash.new { |h, k| h[k] = Set.new }
+            rejected_transforms = Set.new
             additional_producers.each do |(add_from, add_to), producer_name|
-		if !add_from
-		    raise ArgumentError, "explicitly provided #{producer_name} as a transform producer from a nil frame"
+                if !add_from
+                    raise ArgumentError, "explicitly provided #{producer_name} as a transform producer from a nil frame"
                 elsif !add_to
-		    raise ArgumentError, "explicitly provided #{producer_name} as a transform producer to a nil frame"
+                    raise ArgumentError, "explicitly provided #{producer_name} as a transform producer to a nil frame"
                 elsif add_from == add_to
-		    raise ArgumentError, "explicitly provided #{producer_name} as a transform producer for #{add_from} onto itself"
-		end
-                trsf = DynamicTransform.new(add_from, add_to, producer_name)
-                all_transforms[trsf.from] << [trsf, false]
-                all_transforms[trsf.to]   << [trsf, true]
-                known_transforms << [trsf.from, trsf.to] << [trsf.to, trsf.from]
+                    raise ArgumentError, "explicitly provided #{producer_name} as a transform producer for #{add_from} onto itself"
+                end
+                if producer_name
+                    trsf = DynamicTransform.new(add_from, add_to, producer_name)
+                    all_transforms[trsf.from] << [trsf, false]
+                    all_transforms[trsf.to]   << [trsf, true]
+                    known_transforms << [trsf.from, trsf.to] << [trsf.to, trsf.from]
+                else
+                    rejected_transforms << [add_from, add_to] << [add_to, add_from]
+                end
             end
 
             conf.transforms.each_value do |trsf|
                 next if only_static && trsf.kind_of?(DynamicTransform)
+                next if rejected_transforms.include?([trsf.from, trsf.to])
 
                 if !known_transforms.include?([trsf.from, trsf.to])
                     all_transforms[trsf.from] << [trsf, false]

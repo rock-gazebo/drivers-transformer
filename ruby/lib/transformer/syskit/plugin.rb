@@ -37,6 +37,16 @@ module Transformer
                         end
                     end
                 end
+
+                # But reject all transformations that are being produced by us
+                tr.each_transform_output do |port, transform|
+                    port_from = task.selected_frames[transform.from]
+                    port_to   = task.selected_frames[transform.to]
+                    if port_from && port_to
+                        self_producers[[port_from, port_to]] = nil
+                    end
+                end
+
                 # Special case: dynamic_transformations
                 if dyn_port = task.find_port('dynamic_transformations')
                     dyn_port.each_concrete_connection do |out_port, _|
