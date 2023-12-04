@@ -323,7 +323,19 @@ module Transformer
         end
 
         # Returns the shortest transformation chains that link +from+ to +to+
-        def transformation_chain(from, to, additional_producers = Hash.new, only_static: false)
+        #
+        # @param [String] from the name of the source frame of the desired chain
+        # @param [String] to the name of the source frame of the desired chain
+        # @param [{[String, String]=>Object,nil}] additional dynamic producers that
+        #   should be added to the producers already present in config. This is to allow
+        #   selecting specific producers for a given resolution. If the producer is nil,
+        #   no dynamic producers will be considered for this particular transformation,
+        #   even if one is present in the Transformer configuration
+        # @param [Boolean] only_static only consider static transformations
+        #
+        # @return [TransformChain]
+        # @raise TransformationNotFound
+        def transformation_chain(from, to, additional_producers = {}, only_static: false)
             from = from.to_s
             to = to.to_s
             checker.check_frame(from, conf.frames)

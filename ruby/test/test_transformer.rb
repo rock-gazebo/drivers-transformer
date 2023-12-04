@@ -92,6 +92,25 @@ module Transformer
             end
         end
     end
+
+    describe TransformationManager do
+        describe "#transformation_chain" do
+            it "rejects transformations that have a nil producer "\
+               "in additional_transforms" do
+                trsf = Transformer::TransformationManager.new
+                conf = trsf.conf
+                conf.frames "a", "b", "c", "d"
+
+                conf.static_transform(Eigen::Vector3.new(0, 0, 0), "a" => "b")
+                conf.dynamic_transform("test", "b" => "c")
+                conf.static_transform(Eigen::Vector3.new(0, 0, 0), "c" => "d")
+
+                assert_raises(TransformationNotFound) do
+                    trsf.transformation_chain("a", "d", { %w[b c] => nil })
+                end
+            end
+        end
+    end
 end
 
 
@@ -148,4 +167,3 @@ class TC_Transformer < Minitest::Test
         assert_equal 3, copy.frames.size
     end
 end
-
