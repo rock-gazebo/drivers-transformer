@@ -215,8 +215,9 @@ describe Transformer::SyskitPlugin do
                 transform_output 'alternate_transforms', 'alternate_object' => 'alternate_world'
             end
         end
-        multi_producer_m.provides srv_m, as: 'test',
-            'transforms' => 'alternate_transforms'
+        multi_producer_m.provides(
+            srv_m, { 'transforms' => 'alternate_transforms' }, as: 'test'
+        )
 
         syskit_stub_requirements(multi_producer_m)
         task_m = self.data_consumer_m.

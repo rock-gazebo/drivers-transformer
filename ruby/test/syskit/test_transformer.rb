@@ -99,4 +99,3 @@ describe Transformer do
         end
     end
 end
-
