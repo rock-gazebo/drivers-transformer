@@ -1,8 +1,16 @@
 require "rake/testtask"
 
-Rake::TestTask.new(:test) do |t|
+Rake::TestTask.new("test:lib") do |t|
     t.libs << "."
     t.libs << "lib"
     t.test_files = FileList['test/test_*.rb']
     t.warning = false
 end
+Rake::TestTask.new("test:syskit") do |t|
+    t.libs << "."
+    t.libs << "lib"
+    t.test_files = FileList['test/syskit/test_*.rb']
+    t.warning = false
+end
+
+task "test" => ["test:lib", "test:syskit"]
