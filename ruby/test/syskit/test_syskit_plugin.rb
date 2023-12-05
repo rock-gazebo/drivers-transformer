@@ -137,21 +137,15 @@ describe Transformer::SyskitPlugin do
             .use_frames("object" => "object_global", "world" => "world_global")
             .transformer { frames "object_global", "world_global" }
 
-        # Yuk, yes, need to fix syskit_deploy to raise the actual error
-        e = assert_raises(Roby::Test::ExecutionExpectations::UnexpectedErrors) do
+        e = assert_raises(Transformer::InvalidChain) do
             syskit_deploy(task_m)
         end
-        planning_failed = e.each_execution_exception.find do |e|
-            e.exception.kind_of?(Roby::PlanningFailedError)
-        end
-        invalid_chain_e = planning_failed.exception.each_original_exception.first
-        assert_kind_of Transformer::InvalidChain, invalid_chain_e
 
         expected_m = "cannot find a transformation chain to produce object_global => "\
                      "world_global for DataConsumer.* \\\(task-local frames: object => "\
                      "world\\\): no transformation from 'object_global' to "\
                      "'world_global' available"
-        assert_match Regexp.new(expected_m), invalid_chain_e.message
+        assert_match Regexp.new(expected_m), e.message
     end
 
     it "instanciates dynamic producers" do
