@@ -24,7 +24,7 @@ describe Transformer::SyskitPlugin do
             output_port 'samples', '/double'
             output_port 'transform_samples', '/base/samples/RigidBodyState'
             transformer do
-                associate_frame_to_ports 'producer_object', 'samples'
+                associate_ports_to_frame "samples", "producer_object"
                 transform_output 'transform_samples',
                     'producer_object' => 'producer_world'
                 max_latency 0.1
@@ -37,7 +37,7 @@ describe Transformer::SyskitPlugin do
             input_port 'transform_samples', '/base/samples/RigidBodyState'
             transformer do
                 transform 'object', 'world'
-                associate_frame_to_ports 'object', 'samples'
+                associate_ports_to_frame "samples", "object"
                 transform_input 'transform_samples',
                     'object' => 'world'
                 max_latency 0.1
@@ -137,21 +137,15 @@ describe Transformer::SyskitPlugin do
             .use_frames("object" => "object_global", "world" => "world_global")
             .transformer { frames "object_global", "world_global" }
 
-        # Yuk, yes, need to fix syskit_deploy to raise the actual error
-        e = assert_raises(Roby::Test::ExecutionExpectations::UnexpectedErrors) do
+        e = assert_raises(Transformer::InvalidChain) do
             syskit_deploy(task_m)
         end
-        planning_failed = e.each_execution_exception.find do |e|
-            e.exception.kind_of?(Roby::PlanningFailedError)
-        end
-        invalid_chain_e = planning_failed.exception.each_original_exception.first
-        assert_kind_of Transformer::InvalidChain, invalid_chain_e
 
         expected_m = "cannot find a transformation chain to produce object_global => "\
                      "world_global for DataConsumer.* \\\(task-local frames: object => "\
                      "world\\\): no transformation from 'object_global' to "\
                      "'world_global' available"
-        assert_match Regexp.new(expected_m), invalid_chain_e.message
+        assert_match Regexp.new(expected_m), e.message
     end
 
     it "instanciates dynamic producers" do
@@ -215,8 +209,9 @@ describe Transformer::SyskitPlugin do
                 transform_output 'alternate_transforms', 'alternate_object' => 'alternate_world'
             end
         end
-        multi_producer_m.provides srv_m, as: 'test',
-            'transforms' => 'alternate_transforms'
+        multi_producer_m.provides(
+            srv_m, { 'transforms' => 'alternate_transforms' }, as: 'test'
+        )
 
         syskit_stub_requirements(multi_producer_m)
         task_m = self.data_consumer_m.

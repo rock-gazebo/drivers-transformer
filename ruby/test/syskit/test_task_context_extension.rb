@@ -13,7 +13,7 @@ describe Transformer::TaskContextExtension do
             output_port 'data', '/double'
             output_port 'transform', '/base/samples/RigidBodyState'
             transformer do
-                associate_frame_to_ports 'dev', 'data'
+                associate_ports_to_frame "data", "dev"
                 transform_output 'transform', 'from' => 'to'
                 max_latency 0.1
             end

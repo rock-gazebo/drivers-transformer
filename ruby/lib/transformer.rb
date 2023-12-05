@@ -30,7 +30,7 @@ module Transformer
     # A geometric frame, referenced to by name
     class Frame
         # The name of the frame
-        attr_accessor :name    
+        attr_accessor :name
 
         def hash; name.hash end
         def eql?(other)
@@ -50,7 +50,7 @@ module Transformer
         # Name of the source frame
         attr_reader :from
         # Name of the target frame
-        attr_reader :to   
+        attr_reader :to
 
         def initialize(from, to)
             @from = from
@@ -117,7 +117,7 @@ module Transformer
             super
             @producer = old.producer.dup
         end
-        
+
         def pretty_print(pp)
             super
             pp.text ": produced by #{producer}"
@@ -235,7 +235,7 @@ module Transformer
 	    end
         end
     end
-    
+
     # Exception raised when a transformation requested in #transformation_chain
     # cannot be found
     class TransformationNotFound < RuntimeError
@@ -288,7 +288,7 @@ module Transformer
 
         # Returns the set of transformations in +transforms+ where
         #
-        # * +node+ is a starting point 
+        # * +node+ is a starting point
         # * the transformation is not +node.parent+ => +node+
         #
         # The returned array is an array of elements [transformation, inverse]
@@ -335,22 +335,28 @@ module Transformer
 
             known_transforms = Set.new
             all_transforms = Hash.new { |h, k| h[k] = Set.new }
+            rejected_transforms = Set.new
             additional_producers.each do |(add_from, add_to), producer_name|
-		if !add_from
-		    raise ArgumentError, "explicitly provided #{producer_name} as a transform producer from a nil frame"
+                if !add_from
+                    raise ArgumentError, "explicitly provided #{producer_name} as a transform producer from a nil frame"
                 elsif !add_to
-		    raise ArgumentError, "explicitly provided #{producer_name} as a transform producer to a nil frame"
+                    raise ArgumentError, "explicitly provided #{producer_name} as a transform producer to a nil frame"
                 elsif add_from == add_to
-		    raise ArgumentError, "explicitly provided #{producer_name} as a transform producer for #{add_from} onto itself"
-		end
-                trsf = DynamicTransform.new(add_from, add_to, producer_name)
-                all_transforms[trsf.from] << [trsf, false]
-                all_transforms[trsf.to]   << [trsf, true]
-                known_transforms << [trsf.from, trsf.to] << [trsf.to, trsf.from]
+                    raise ArgumentError, "explicitly provided #{producer_name} as a transform producer for #{add_from} onto itself"
+                end
+                if producer_name
+                    trsf = DynamicTransform.new(add_from, add_to, producer_name)
+                    all_transforms[trsf.from] << [trsf, false]
+                    all_transforms[trsf.to]   << [trsf, true]
+                    known_transforms << [trsf.from, trsf.to] << [trsf.to, trsf.from]
+                else
+                    rejected_transforms << [add_from, add_to] << [add_to, add_from]
+                end
             end
 
             conf.transforms.each_value do |trsf|
                 next if only_static && trsf.kind_of?(DynamicTransform)
+                next if rejected_transforms.include?([trsf.from, trsf.to])
 
                 if !known_transforms.include?([trsf.from, trsf.to])
                     all_transforms[trsf.from] << [trsf, false]
@@ -414,7 +420,7 @@ module Transformer
             errors = []
             if(!frames.include?(transformation.from))
                 errors << "transformation from #{transformation.from} to #{transformation.to} uses unknown frame #{transformation.from}, known frames: #{frames.to_a.sort.join(", ")}"
-            end	
+            end
 
             if(!frames.include?(transformation.to))
                 errors << "transformation from #{transformation.from} to #{transformation.to} uses unknown frame #{transformation.to}, known frames: #{frames.to_a.sort.join(", ")}"
@@ -599,7 +605,7 @@ module Transformer
             tr = DynamicTransform.new(from, to, producer)
 	    add_transform(tr)
         end
-    
+
         # Declare a transformation
         #
         # @see static_transform dynamic_transform
@@ -835,7 +841,7 @@ module Transformer
                 pp.breakable
                 pp.text "Available Frames:"
                 pp.nest(2) do
-                    frames.each do |i| 
+                    frames.each do |i|
                         pp.breakable
                         i.pretty_print(pp)
                     end

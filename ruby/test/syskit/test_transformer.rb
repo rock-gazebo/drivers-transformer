@@ -85,7 +85,7 @@ describe Transformer do
                 output_port "samples", "/double"
                 driver_for dev_m, as: "test"
                 transformer do
-                    associate_frame_to_ports "frame", "samples"
+                    associate_ports_to_frame "samples", "frame"
                     max_latency 0.1
                 end
             end
@@ -99,4 +99,3 @@ describe Transformer do
         end
     end
 end
-
