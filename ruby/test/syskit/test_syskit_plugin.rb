@@ -24,7 +24,7 @@ describe Transformer::SyskitPlugin do
             output_port 'samples', '/double'
             output_port 'transform_samples', '/base/samples/RigidBodyState'
             transformer do
-                associate_frame_to_ports 'producer_object', 'samples'
+                associate_ports_to_frame "samples", "producer_object"
                 transform_output 'transform_samples',
                     'producer_object' => 'producer_world'
                 max_latency 0.1
@@ -37,7 +37,7 @@ describe Transformer::SyskitPlugin do
             input_port 'transform_samples', '/base/samples/RigidBodyState'
             transformer do
                 transform 'object', 'world'
-                associate_frame_to_ports 'object', 'samples'
+                associate_ports_to_frame "samples", "object"
                 transform_input 'transform_samples',
                     'object' => 'world'
                 max_latency 0.1
