@@ -708,10 +708,16 @@ module Transformer
         #   @return [StaticTransform]
         #
         def static_transform(*transformation)
-            from, to, translation, rotation = validate_static_transform_arguments(*transformation)
+            from, to, translation, rotation =
+                validate_static_transform_arguments(*transformation)
             tr = StaticTransform.new(from, to, translation, rotation)
-	    add_transform(tr)
+            add_transform(tr)
             tr
+        end
+
+        # Shortcut to declare that two frames are the same
+        def identity_transform(transformations)
+            static_transform Eigen::Vector3.Zero, transformations
         end
 
         # Declares an example transformation between two frames

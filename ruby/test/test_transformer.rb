@@ -95,75 +95,115 @@ module Transformer
 
     describe TransformationManager do
         describe "#transformation_chain" do
-            it "rejects transformations that have a nil producer "\
-               "in additional_transforms" do
-                trsf = Transformer::TransformationManager.new
-                conf = trsf.conf
+            attr_reader :trsf, :conf
+
+            before do
+                @trsf = Transformer::TransformationManager.new
+                @conf = trsf.conf
                 conf.frames "a", "b", "c", "d"
+            end
 
-                conf.static_transform(Eigen::Vector3.new(0, 0, 0), "a" => "b")
-                conf.dynamic_transform("test", "b" => "c")
-                conf.static_transform(Eigen::Vector3.new(0, 0, 0), "c" => "d")
+            it "resolves a transformation chain" do
+                a_b = conf.identity_transform("a" => "b")
+                b_c = conf.dynamic_transform("test", "b" => "c")
+                c_d = conf.identity_transform("c" => "d")
+                chain = trsf.transformation_chain("a", "d")
+                assert_equal([a_b, b_c, c_d], chain.links)
+                assert_equal([false, false, false], chain.inversions)
+            end
 
+            it "inverts dynamic links if needed" do
+                a_b = conf.identity_transform("a" => "b")
+                c_b = conf.dynamic_transform("test", "c" => "b")
+                c_d = conf.identity_transform("c" => "d")
+                chain = trsf.transformation_chain("a", "d")
+                assert_equal([a_b, c_b, c_d], chain.links)
+                assert_equal([false, true, false], chain.inversions)
+            end
+
+            it "inverts static links if needed" do
+                a_b = conf.identity_transform("a" => "b")
+                c_b = conf.identity_transform("c" => "b")
+                c_d = conf.identity_transform("c" => "d")
+                chain = trsf.transformation_chain("a", "d")
+                assert_equal([a_b, c_b, c_d], chain.links)
+                assert_equal([false, true, false], chain.inversions)
+            end
+
+            it "resolves the shortest path" do
+                a_b = conf.identity_transform("a" => "b")
+                c_b = conf.identity_transform("c" => "b")
+                c_d = conf.identity_transform("c" => "d")
+                a_c = conf.identity_transform("a" => "c")
+                chain = trsf.transformation_chain("a", "d")
+                assert_equal([a_c, c_d], chain.links)
+                assert_equal([false, false], chain.inversions)
+            end
+
+            it "rejects static transformations that have a nil producer "\
+               "in additional_transforms" do
+                conf.identity_transform("a" => "b")
+                conf.identity_transform("b" => "c")
+                conf.identity_transform("c" => "d")
+
+                # Verify that the configuration does resolve normally
+                trsf.transformation_chain("a", "d")
                 assert_raises(TransformationNotFound) do
                     trsf.transformation_chain("a", "d", { %w[b c] => nil })
                 end
             end
+
+            it "rejects static transformations that have a nil producer "\
+               "in additional_transforms, even if specified inverted" do
+                conf.identity_transform("a" => "b")
+                conf.identity_transform("b" => "c")
+                conf.identity_transform("c" => "d")
+
+                # Verify that the configuration does resolve normally
+                trsf.transformation_chain("a", "d")
+                assert_raises(TransformationNotFound) do
+                    trsf.transformation_chain("a", "d", { %w[c b] => nil })
+                end
+            end
+
+            it "rejects dynamic transformations that have a nil producer "\
+               "in additional_transforms" do
+                conf.identity_transform( "a" => "b")
+                conf.dynamic_transform("test", "b" => "c")
+                conf.identity_transform( "c" => "d")
+
+                # Verify that the configuration does resolve normally
+                trsf.transformation_chain("a", "d")
+                assert_raises(TransformationNotFound) do
+                    trsf.transformation_chain("a", "d", { %w[b c] => nil })
+                end
+            end
+
+            it "rejects dynamic transformations that have a nil producer "\
+               "in additional_transforms, even if specified inverted" do
+                conf.identity_transform( "a" => "b")
+                conf.dynamic_transform("test", "b" => "c")
+                conf.identity_transform( "c" => "d")
+
+                # Verify that the configuration does resolve normally
+                trsf.transformation_chain("a", "d")
+                assert_raises(TransformationNotFound) do
+                    trsf.transformation_chain("a", "d", { %w[c b] => nil })
+                end
+            end
         end
-    end
-end
 
-
-class TC_Transformer < Minitest::Test
-    attr_reader :trsf, :transforms
-
-    def conf
-        trsf.conf
-    end
-
-    def setup
-        super
-
-        @trsf = Transformer::TransformationManager.new
-        conf.frames "body", "servo_low", "servo_high", "laser", "camera", "camera_optical"
-
-        @transforms = [
-            conf.static_transform(Eigen::Vector3.new(0, 0, 0), "body" => "servo_low"),
-            conf.static_transform(Eigen::Vector3.new(0, 0, 0), "servo_high" => "laser"),
-            conf.static_transform(Eigen::Vector3.new(0, 0, 0), "laser" => "camera")
-        ]
-    end
-
-    def test_simple_transformation_chain
-        transforms.insert(1, conf.dynamic_transform("dynamixel", "servo_low" => "servo_high"))
-        chain = trsf.transformation_chain("body", "laser")
-        assert_equal(transforms[0, 3], chain.links)
-        assert_equal([false, false, false], chain.inversions)
-    end
-
-    def test_transformation_chain_with_inversions
-        transforms.insert(1, conf.dynamic_transform("dynamixel", "servo_high" => "servo_low"))
-        chain = trsf.transformation_chain("body", "laser")
-        assert_equal(transforms[0, 3], chain.links)
-        assert_equal([false, true, false], chain.inversions)
-    end
-
-    def test_transformation_chain_with_loop_shortest_path
-        transforms.insert(1, conf.dynamic_transform("dynamixel", "servo_high" => "servo_low"))
-        transforms << conf.static_transform(Eigen::Vector3.new(0, 0, 0), "servo_high" => "body")
-        chain = trsf.transformation_chain("body", "laser")
-        assert_equal([transforms[4], transforms[2]], chain.links)
-        assert_equal([true, false], chain.inversions)
-    end
-
-    def test_dup_isolates_the_sets_of_the_receiver_from_the_new_object
-        trsf = Transformer::TransformationManager.new
-        conf = trsf.conf
-        conf.static_transform Eigen::Vector3.new(0, 0, 0), "body" => "servo_low"
-        conf.dynamic_transform 'dynamixel', "servo_high" => "servo_low"
-        copy = conf.dup
-        conf.clear
-        assert_equal 2, copy.transforms.size
-        assert_equal 3, copy.frames.size
+        describe "#dup" do
+            it "isolates the sets of the receiver from the new object" do
+                trsf = Transformer::TransformationManager.new
+                conf = trsf.conf
+                conf.static_transform Eigen::Vector3.new(0, 0, 0), "body" => "servo_low"
+                conf.dynamic_transform "dynamixel", "servo_high" => "servo_low"
+                copy = conf.dup
+                conf.clear
+                assert_equal 2, copy.transforms.size
+                assert_equal 3, copy.frames.size
+            end
+        end
     end
 end
