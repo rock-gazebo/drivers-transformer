@@ -74,6 +74,54 @@ describe Transformer::SyskitPlugin do
         assert_equal 'world_global', task.properties.world_frame
     end
 
+    it "does not attempt to use a producer's own output to configure it" do
+        producer_task_m = Syskit::TaskContext.new_submodel name: "DataProducer" do
+            output_port "transforms", "/base/samples/RigidBodyState"
+            transformer do
+                transform "object", "world"
+                transform_output "transforms", "object" => "world"
+                max_latency 0.1
+            end
+        end
+        producer_m =
+            producer_task_m
+            .use_frames("object" => "a", "world" => "b")
+            .transformer { frames "a", "b" }
+        task_m =
+            data_consumer_m
+            .use_frames("object" => "a", "world" => "b")
+            .transformer { dynamic_transform producer_m, "a" => "b" }
+        task = syskit_stub_deploy_and_configure(task_m)
+
+        producer = task.each_child.first.first
+        assert_kind_of producer_task_m, producer
+        assert producer.transforms_port.connected_to?(task.dynamic_transformations_port)
+    end
+
+    it "rejects inverted transforms when checking for self-produced transforms" do
+        producer_task_m = Syskit::TaskContext.new_submodel name: "DataProducer" do
+            output_port "transforms", "/base/samples/RigidBodyState"
+            transformer do
+                transform "object", "world"
+                transform_output "transforms", "world" => "object"
+                max_latency 0.1
+            end
+        end
+        producer_m =
+            producer_task_m
+            .use_frames("object" => "a", "world" => "b")
+            .transformer { frames "a", "b" }
+        task_m =
+            data_consumer_m
+            .use_frames("object" => "a", "world" => "b")
+            .transformer { dynamic_transform producer_m, "b" => "a" }
+        task = syskit_stub_deploy_and_configure(task_m)
+
+        producer = task.each_child.first.first
+        assert_kind_of producer_task_m, producer
+        assert producer.transforms_port.connected_to?(task.dynamic_transformations_port)
+    end
+
     it "propagates data port frame information forward in the dataflow" do
         cmp_m.add self.data_producer_m, as: 'producer'
         cmp_m.add self.data_consumer_m, as: 'consumer'
