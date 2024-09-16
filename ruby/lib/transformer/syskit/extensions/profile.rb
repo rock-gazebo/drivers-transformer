@@ -63,7 +63,12 @@ module Transformer
             @transformer = tr
         end
 
-        def use_profile(profile, tags = Hash.new, transform_names: ->(name) { name })
+        def use_profile(
+            profile,
+            tags = Hash.new,
+            transform_names: ->(name) { name },
+            prefer_deployed_tasks: nil
+        )
             if profile.has_transformer?
                 use_profile_transformer(profile, tags)
             end
