@@ -224,40 +224,6 @@ module Transformer
             end
         end
 
-        class PortAssociationMismatch < RuntimeError
-            # The problematic endpoint, as a [task, port_name] pair
-            attr_reader :endpoint
-            # The other side of the problematic connection(s)
-            attr_reader :connections
-            # The association type expected by +endpoint+. Can either be 'frame'
-            # for an association between a port and a frame, and 'transform' for
-            # an association between a port and a transformation.
-            attr_reader :association_type
-
-            def initialize(task, port_name, type)
-                @endpoint = [task, port_name]
-                @association_type = type
-
-                @connections = []
-                task.each_concrete_input_connection(port_name) do |source_task, source_port_name, _|
-                    @connections << [source_task, source_port_name]
-                end
-                task.each_concrete_output_connection(port_name) do |_, sink_port_name, sink_task, _|
-                    @connections << [sink_task, sink_port_name]
-                end
-            end
-
-            def pretty_print(pp)
-                pp.text "#{endpoint[0]}.#{endpoint[1]} was expecting an association with a #{association_type}, but one or more connections mismatch"
-                pp.nest(2) do
-                    pp.breakable
-                    pp.seplist(connections) do |conn|
-                        pp.text "#{conn[0]}.#{conn[1]}"
-                    end
-                end
-            end
-        end
-
         def propagate_task(task)
             return if !(tr = task.model.transformer)
 
@@ -266,8 +232,8 @@ module Transformer
             tr.each_annotated_port do |port, frame|
                 if has_information_for_port?(task, port.name)
                     info = port_info(task, port.name)
-                    if !info.respond_to?(:selected_frame)
-                        raise PortAssociationMismatch.new(task, port.name, 'frame')
+                    unless info.respond_to? :selected_frame
+                        raise PortAssociationMismatch.new(task, port.name, "frame")
                     end
 
                     debug { "selecting #{info.selected_frame} on #{task} for #{frame} through port #{port.name}" }
@@ -295,7 +261,7 @@ module Transformer
                 next if has_final_information_for_port?(task, port.name)
 
                 if selected_frame = task.selected_frames[frame_name]
-                    if !has_information_for_port?(task, port.name)
+                    unless has_information_for_port?(task, port.name)
                         add_port_info(task, port.name, FrameAnnotation.new(task, frame_name, selected_frame))
                         done_port_info(task, port.name)
                     end
@@ -305,6 +271,7 @@ module Transformer
             end
             tr.each_transform_port do |port, transform|
                 next if has_final_information_for_port?(task, port.name)
+
                 from = task.selected_frames[transform.from]
                 to   = task.selected_frames[transform.to]
                 add_port_info(task, port.name, TransformAnnotation.new(task, transform.from, from, transform.to, to))
@@ -333,16 +300,25 @@ module Transformer
         def self.initial_frame_selection_from_device(task, dev)
             tr = task.model.transformer
             if selected_frame = dev.frame
-                if !task.transformer.has_frame?(selected_frame)
-                    raise Transformer::InvalidConfiguration, "undefined frame #{selected_frame} selected as reference frame for #{dev}, known frames: #{task.transformer.frames.sort.join(", ")}"
+                unless task.transformer.has_frame?(selected_frame)
+                    raise Transformer::InvalidConfiguration,
+                          "undefined frame #{selected_frame} selected as reference " \
+                          "frame for #{dev}, known frames: " \
+                          "#{task.transformer.frames.sort.join(", ")}"
                 end
             end
             if selected_transform = dev.frame_transform
-                if !task.transformer.has_frame?(selected_transform.from)
-                    raise Transformer::InvalidConfiguration, "undefined frame #{selected_transform.from} selected as 'from' frame for #{dev}, known frames: #{task.transformer.frames.sort.join(", ")}"
+                unless task.transformer.has_frame?(selected_transform.from)
+                    raise Transformer::InvalidConfiguration,
+                          "undefined frame #{selected_transform.from} selected as " \
+                          "'from' frame for #{dev}, known frames: " \
+                          "#{task.transformer.frames.sort.join(", ")}"
                 end
-                if !task.transformer.has_frame?(selected_transform.to)
-                    raise Transformer::InvalidConfiguration, "undefined frame #{selected_transform.to} selected as 'to' frame for #{dev}, known frames: #{task.transformer.frames.sort.join(", ")}"
+                unless task.transformer.has_frame?(selected_transform.to)
+                    raise Transformer::InvalidConfiguration,
+                          "undefined frame #{selected_transform.to} selected as " \
+                          "'to' frame for #{dev}, known frames: " \
+                          "#{task.transformer.frames.sort.join(", ")}"
                 end
             end
 
@@ -427,15 +403,21 @@ module Transformer
                     current_selection
                 else
                     debug { "adding frame selection from #{task}: #{new_selections}" }
-                    new_selections.each do |frame_name, selected_frame|
-                        if !task.transformer.has_frame?(selected_frame)
-                            raise InvalidConfiguration, "undefined frame #{selected_frame} selected for '#{frame_name}' in #{task}, known frames: #{task.transformer.frames.sort.join(", ")}"
-                        end
-                    end
                     new_selections
                 end
             result = result.merge(static_frames)
             task.select_frames(result)
+
+            # Select the frames and then validate that they exist. This is using the fact
+            # that any raised exception is caught and resolved independently.
+            result.each do |frame_name, selected_frame|
+                unless task.transformer.has_frame?(selected_frame)
+                    raise InvalidConfiguration,
+                          "undefined frame #{selected_frame} selected for "\
+                          "'#{frame_name}' in #{task}, known frames: " \
+                          "#{task.transformer.frames.sort.join(", ")}"
+                end
+            end
             result
         end
 

@@ -8,6 +8,7 @@ describe Transformer do
         before do
             Roby.app.import_types_from "base"
             Roby.app.import_types_from "transformer"
+            Roby.app.using_task_library "transformer"
         end
 
         it "detects unknown frames" do

@@ -196,6 +196,169 @@ describe Transformer::SyskitPlugin do
         assert_match Regexp.new(expected_m), e.message
     end
 
+    it "raises if at least one of the assigned frames is invalid" do
+        task_m =
+            data_consumer_m
+            .use_frames("object" => "object_global", "world" => "wrong_frame")
+            .transformer { frames "object_global", "world_global" }
+
+        e = assert_raises(Transformer::InvalidConfiguration) do
+            syskit_deploy(task_m)
+        end
+        expected_m = "undefined frame wrong_frame"
+        assert_match Regexp.new(expected_m), e.message
+    end
+
+    it "raises if the tasks transform frames arent all assigned" do
+        task_m =
+            data_consumer_m
+            .use_frames("object" => "object_global")
+            .transformer { frames "object_global", "world_global" }
+
+        e = assert_raises(Transformer::MissingFrame) do
+            syskit_deploy(task_m)
+        end
+        expected_m = /could not find a frame assignment for world in/
+        assert_match expected_m, e.message
+    end
+
+    describe "with error capture" do
+        before do
+            @__capture_errors = Syskit.conf.capture_errors_during_network_resolution?
+            Syskit.conf.capture_errors_during_network_resolution = true
+        end
+
+        after do
+            Syskit.conf.capture_errors_during_network_resolution = @__capture_errors
+        end
+
+        it "raises if a chain cannot be resolved" do
+            task_m =
+                data_consumer_m
+                .use_frames("object" => "object_global", "world" => "world_global")
+                .transformer { frames "object_global", "world_global" }
+
+            e = assert_raises(Syskit::NetworkGeneration::PartialNetworkResolution) do
+                syskit_deploy(task_m)
+            end
+
+            invalid_chain = assert_exception_from_partial_network_resolution(
+                e, Transformer::InvalidChain
+            )
+            expected_m = "cannot find a transformation chain to produce object_global => "\
+                         "world_global for DataConsumer.* \\\(task-local frames: object => "\
+                         "world\\\): no transformation from 'object_global' to "\
+                         "'world_global' available"
+            assert_match Regexp.new(expected_m), invalid_chain.message
+        end
+
+        it "raises if at least one of the assigned frames is invalid" do
+            task_m =
+                data_consumer_m
+                .use_frames("object" => "object_global", "world" => "wrong_frame")
+                .transformer { frames "object_global", "world_global" }
+
+            e = assert_raises(Syskit::NetworkGeneration::PartialNetworkResolution) do
+                syskit_deploy(task_m)
+            end
+            invalid_configuration = assert_exception_from_partial_network_resolution(
+                e, Transformer::InvalidConfiguration
+            )
+            expected_m = "undefined frame wrong_frame"
+            assert_match Regexp.new(expected_m), invalid_configuration.message
+        end
+
+        it "raises if the tasks transform frames arent all assigned" do
+            task_m =
+                data_consumer_m
+                .use_frames("object" => "object_global")
+                .transformer { frames "object_global", "world_global" }
+
+            e = assert_raises(Syskit::NetworkGeneration::PartialNetworkResolution) do
+                syskit_deploy(task_m)
+            end
+            missing_frame = assert_exception_from_partial_network_resolution(
+                e, Transformer::MissingFrame
+            )
+            expected_m = /could not find a frame assignment for world in/
+            assert_match expected_m, missing_frame.message
+        end
+
+        it "raises if there is an association mismatch" do
+            task = Syskit::TaskContext.new_submodel name: 'DataConsumer' do
+                property 'object_frame', '/std/string'
+                property 'world_frame', '/std/string'
+                input_port 'samples', '/double'
+                transformer do
+                    transform 'object', 'world'
+                    associate_ports_to_transform "samples", "object" => "world"
+                    associate_ports_to_frame "samples", "object"
+                    max_latency 0.1
+                end
+            end
+            e = assert_raises(Syskit::NetworkGeneration::PartialNetworkResolution) do
+                syskit_deploy(task)
+            end
+            assert_exception_from_partial_network_resolution(
+                e, Transformer::PortAssociationMismatch
+            )
+        end
+
+        it "raises if there is a frame selection conflict" do
+            cmp_m.add(data_producer_m
+                        .use_frames("producer_object" => "object_global",
+                                    "producer_world" => "world_global")
+                        .transformer { frames "object_global", "world_global" },
+                      as: "prod")
+            cmp_m.add(data_consumer_m
+                        .use_frames("object" => "object_local", "world" => "world_global")
+                        .transformer { frames "object_local", "world_global" },
+                      as: "cons")
+            cmp_m.prod_child.connect_to cmp_m.cons_child
+
+            e = assert_raises(Syskit::NetworkGeneration::PartialNetworkResolution) do
+                syskit_deploy(cmp_m)
+            end
+            assert_exception_from_partial_network_resolution(
+                e, Transformer::FrameSelectionConflict
+            )
+        end
+
+        it "raises if there is a static frame change" do
+            cmp_m.add(data_consumer_m
+                        .use_frames("object" => "object_global", "world" => "world_global")
+                        .transformer do
+                            frames "object_global", "world_global"
+                            static_transform Eigen::Vector3.new(1, 0, 0),
+                                "object_global" => "world_global"
+                        end,
+                      as: "cons")
+            # Makes object a static frame just to induce the error of selecting it for
+            # data consumer
+            flexmock(data_consumer_m.transformer)
+                .should_receive(:configurable?)
+                .and_return { |frame_name| frame_name != "object" }
+            e = assert_raises(Syskit::NetworkGeneration::PartialNetworkResolution) do
+              syskit_deploy(cmp_m)
+            end
+            assert_exception_from_partial_network_resolution(
+                e, Transformer::StaticFrameChangeError
+            )
+        end
+
+        def assert_exception_from_partial_network_resolution(err, exception_kind)
+            exception = err.original_exceptions
+                           .find { |excpt| excpt.kind_of? exception_kind }
+            assert_msg = <<~MSG
+                expected that the resolution error contained an exception of kind #{exception_kind}, but it contains these instead:
+
+            MSG
+            assert_msg += err.original_exceptions.join("\n")
+            assert exception, assert_msg
+            exception
+        end
+    end
+
     it "instanciates dynamic producers" do
         transform_producer_m = self.transform_producer_m
         syskit_stub_requirements(transform_producer_m)
