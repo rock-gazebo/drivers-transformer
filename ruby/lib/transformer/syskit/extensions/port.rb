@@ -24,6 +24,8 @@ module Transformer
         #
         # It only yields the ports that do have a frame associated
         def each_frame_of_connected_ports
+            return enum_for(__method__) unless block_given?
+
             each_concrete_connection do |other_port, _|
                 if other_frame = other_port.associated_frame
                     yield other_port, other_frame
@@ -39,6 +41,8 @@ module Transformer
         # might be nil if the corresponding task-local frame is not assigned
         # yet
         def each_transform_of_connected_ports
+            return enum_for(__method__) unless block_given?
+
             each_concrete_connection do |other_port, _|
                 if other_transform = other_port.produced_transformation
                     if other_transform.from || other_transform.to
