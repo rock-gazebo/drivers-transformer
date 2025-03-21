@@ -1,3 +1,5 @@
+# frozen_string_literal: true
+
 module Transformer
     module SyskitPlugin
         class MissingTransform < Syskit::Component
@@ -88,7 +90,6 @@ module Transformer
                     )
                 end
 
-
                 static.each do |trsf|
                     static_transforms[[trsf.from, trsf.to]] = trsf
                 end
@@ -99,10 +100,11 @@ module Transformer
                     # Just ignore it here, we don't need to instanciate it
                     # ourselves
                     next if dyn.producer.kind_of?(Orocos::Spec::Port)
+
                     dynamic_transforms[dyn.producer] << dyn
                 end
             end
-            return static_transforms, dynamic_transforms
+            [static_transforms, dynamic_transforms]
         end
 
         def self.instanciate_producer(manager, task, producer_model, transformations)
@@ -166,7 +168,7 @@ module Transformer
         #
         # @return [Boolean] true if producers have been added to the plan and
         #   false otherwise
-        def self.add_needed_producers(tasks, instanciated_producers)
+        def self.add_needed_producers(tasks, instanciated_producers, engine)
             has_new_producers = false
             tasks.each do |task|
                 dependency_graph = task.relation_graph_for(Roby::TaskStructure::Dependency)
@@ -179,7 +181,7 @@ module Transformer
                 task.static_transforms = static_transforms.values
                 dynamic_transforms.each do |producer_model, transformations|
                     producer_tasks = instanciated_producers[producer_model]
-                    if !producer_tasks.empty?
+                    unless producer_tasks.empty?
                         is_recursive = producer_tasks.any? do |prod_task|
                             prod_task == task || dependency_graph.reachable?(prod_task, task)
                         end
@@ -188,11 +190,16 @@ module Transformer
                         end
                     end
 
-                    if producer_task = instanciate_producer(tr_manager, task, producer_model, transformations)
+                    producer_task = instanciate_producer(
+                        tr_manager, task, producer_model, transformations
+                    )
+                    if producer_task
                         has_new_producers = true
                         instanciated_producers[producer_model] << producer_task
                     end
                 end
+            rescue BaseException, Transformer::InvalidConfiguration => e
+                engine.error_handler.register_resolution_failures_from_exception(task, e)
             end
             has_new_producers
         end
@@ -250,6 +257,11 @@ module Transformer
             tasks = plan.find_local_tasks(Syskit::Component).roots(Roby::TaskStructure::Dependency)
             tasks.each do |root_task|
                 propagate_local_transformer_configuration(root_task)
+            rescue BaseException, Transformer::InvalidConfiguration => e
+                e = e.exception(e.message)
+                engine
+                    .error_handler
+                    .register_resolution_failures_from_exception(root_task, e)
             end
         end
 
@@ -282,15 +294,23 @@ module Transformer
         # It only checks its inputs, as it is meant to iterate over all tasks
         def self.instanciated_network_postprocessing_hook(engine, plan)
             needed = true
-            all_producers = Hash.new { |h, k| h[k] = Array.new }
+            all_producers = Hash.new { |h, k| h[k] = [] }
             while needed
-                FramePropagation.compute_frames(plan)
-                transformer_tasks = plan.find_local_tasks(Syskit::TaskContext).
-                    find_all { |task| task.model.transformer }
+                begin
+                    FramePropagation.compute_frames(plan)
+                    transformer_tasks = plan.find_local_tasks(Syskit::TaskContext)
+                                            .find_all { |task| task.model.transformer }
 
-                # Now find out the frame producers that each task needs, and add them to
-                # the graph
-                needed = add_needed_producers(transformer_tasks, all_producers)
+                    # Now find out the frame producers that each task needs, and add them
+                    # to the graph
+                    needed =
+                        add_needed_producers(transformer_tasks, all_producers, engine)
+                rescue BaseException => e
+                    task = e.task
+                    engine.error_handler
+                          .register_resolution_failures_from_exception(task, e)
+                    break
+                end
             end
         end
 
@@ -404,4 +424,3 @@ module Transformer
         end
     end
 end
-

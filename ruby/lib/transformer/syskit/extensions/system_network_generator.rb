@@ -1,9 +1,13 @@
+# frozen_string_literal: true
+
+require "syskit/network_generation"
+
 module Transformer
     # Module used to add some functionality to Syskit::NetworkGeneration::Engine
     module SystemNetworkGeneratorExtension
         # During network validation, checks that all required frames have been
         # configured
-        def validate_generated_network
+        def validate_generated_network(error_handler: @error_handler)
             super
 
             return unless Syskit.conf.transformer_enabled?
@@ -19,6 +23,8 @@ module Transformer
                 tr.each_needed_transformation do |transform|
                     transformer_validate_frame_assigned(task, transform.from)
                     transformer_validate_frame_assigned(task, transform.to)
+                rescue BaseException => e
+                    @error_handler.register_resolution_failures_from_exception(task, e)
                 end
             end
         end
@@ -39,17 +45,21 @@ module Transformer
                     task_to = placeholder_task.task_to
                     to = placeholder_task.to
                     e = placeholder_task.original_exception
-                    raise InvalidChain.new(
+                    invalid_chain = InvalidChain.new(
                         placeholder_task.transformer,
                         task, task_from, from, task_to, to, e
-                    ),
-                          "cannot find a transformation chain to produce "\
-                          "#{from} => #{to} for #{task} (task-local frames: "\
-                          "#{task_from} => #{task_to}): #{e.message}", e.backtrace
+                    )
+                    message = "cannot find a transformation chain to produce " \
+                              "#{from} => #{to} for #{task} (task-local frames: " \
+                              "#{task_from} => #{task_to}): #{e.message}"
+                    invalid_chain = invalid_chain.exception(message)
+                    invalid_chain.set_backtrace(e.backtrace)
+                    @error_handler
+                        .register_resolution_failures_from_exception(task, invalid_chain)
                 end
         end
 
-        def validate_abstract_network
+        def validate_abstract_network(error_handler: @error_handler)
             super
 
             if Syskit.conf.transformer_enabled?
@@ -59,38 +69,84 @@ module Transformer
                 transformer_tasks = plan.find_local_tasks(Syskit::TaskContext).
                     find_all { |task| task.model.transformer }
                 transformer_tasks.each do |task|
-                    SystemNetworkGeneratorExtension.validate_frame_selection_consistency_through_inputs(task)
+                    SystemNetworkGeneratorExtension
+                        .validate_frame_selection_consistency_through_inputs(
+                            task, error_handler
+                        )
                 end
             end
         end
 
-        def self.validate_frame_selection_consistency_through_inputs(task)
+        def self.validate_mismatched_annotated_input(task, error_handler)
             task.each_annotated_port do |task_port, task_frame|
                 next if !task_port.input? || !task_frame
-                task_port.each_frame_of_connected_ports do |other_port, other_frame|
-                    if other_frame != task_frame
-                        raise FrameSelectionConflict.new(
-                            task,
-                            task.model.find_frame_of_port(task_port),
-                            task_frame,
-                            other_frame)
-                    end
+
+                task_port.each_frame_of_connected_ports
+                         .find_all { |other_port, other_frame| other_frame != task_frame }
+                         .each do |port, frame|
+                             conflict = FrameSelectionConflict.new(
+                                task,
+                                task.model.find_frame_of_port(task_port),
+                                task_frame,
+                                frame
+                             )
+                             error_handler.register_resolution_failures_from_exception(
+                                task, conflict
+                             )
+                         end
+            end
+        end
+
+        def self.validate_mismatched_from_frame_in_transform_input(
+            inputs_from, task, error_handler
+        )
+            inputs_from.each do |task_port, tf|
+                mismatch =
+                    task_port
+                    .each_transform_of_connected_ports
+                    .find_all { |_, other_tf| other_tf.from && other_tf.from != tf.from }
+                mismatch.each do |_, other_tf|
+                    task_local_name = task.model.find_transform_of_port(task_port).from
+                    conflict = FrameSelectionConflict.new(task, task_local_name,
+                                                          tf.from, other_tf.from)
+                    error_handler
+                        .register_resolution_failures_from_exception(task, conflict)
                 end
             end
-            task.each_transform_port do |task_port, task_transform|
-                next if !task_port.input?
-                task_port.each_transform_of_connected_ports do |other_port, other_transform|
-                    if other_transform.from && task_transform.from && other_transform.from != task_transform.from
-                        task_local_name = task.model.find_transform_of_port(task_port).from
-                        raise FrameSelectionConflict.new(task, task_local_name,
-                                                         task_transform.from, other_transform.from)
-                    elsif other_transform.to && task_transform.to && other_transform.to != task_transform.to
-                        task_local_name = task.model.find_transform_of_port(task_port).to
-                        raise FrameSelectionConflict.new(task, task_local_name,
-                                                         task_transform.to, other_transform.to)
-                    end
+        end
+
+        def self.validate_mismatched_to_frame_in_transform_input(
+            inputs_to, task, error_handler
+        )
+            inputs_to.each do |task_port, tf|
+                mismatch =
+                    task_port
+                    .each_transform_of_connected_ports
+                    .find_all { |_, other_tf| other_tf.to && other_tf.to != tf.to }
+                mismatch.each do |_, other_tf|
+                    task_local_name = task.model.find_transform_of_port(task_port).to
+                    conflict = FrameSelectionConflict.new(task, task_local_name,
+                                                          tf.to, other_tf.to)
+                    error_handler
+                        .register_resolution_failures_from_exception(task, conflict)
                 end
             end
+        end
+
+        def self.validate_mismatched_transform_input(task, error_handler)
+            inputs = task.each_transform_port.find_all { |task_port, _| task_port.input? }
+
+            inputs_with_from = inputs.find_all { |_, transform| transform.from }
+            inputs_with_to = inputs.find_all { |_, transform| transform.to }
+            validate_mismatched_from_frame_in_transform_input(inputs_with_from, task,
+                                                              error_handler)
+            validate_mismatched_to_frame_in_transform_input(inputs_with_to, task,
+                                                            error_handler)
+        end
+
+        def self.validate_frame_selection_consistency_through_inputs(task, error_handler)
+            validate_mismatched_annotated_input(task, error_handler)
+            validate_mismatched_transform_input(task, error_handler)
         end
     end
 end
