@@ -56,6 +56,7 @@ module Transformer
             end
 
             transformer.merge(other_spec.transformer)
+            self
         end
 
         # Add some transformer configuration to the current configuration
