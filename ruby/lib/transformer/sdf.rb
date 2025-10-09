@@ -36,11 +36,24 @@ module Transformer
             end
         end
 
-        def parse_sdf_model(sdf, prefix = "", parent_name = "", world_name: nil, &producer_resolver)
+        # Define transformations according to the given SDF model
+        #
+        # @param [SDF::Model] sdf
+        # @param [#[]] filter an object that will be called `filter[link, link_full_name]`
+        #   and should return true if the link should be included in the transformer
+        #   definitions or not. If nil, all links are included.
+        def parse_sdf_model(
+            sdf, prefix = "", parent_name = "", filter: nil, world_name: nil,
+            &producer_resolver
+        )
             full_name = sdf_append_name(prefix, sdf.name)
             frames full_name
 
-            parse_sdf_links_and_joints(sdf, full_name, full_name, world_name: world_name, &producer_resolver)
+            parse_sdf_links_and_joints(
+                sdf, full_name, full_name,
+                filter: filter, world_name: world_name,
+                &producer_resolver
+            )
 
             if world_name
                 begin
@@ -80,16 +93,39 @@ module Transformer
             pose
         end
 
-        def parse_sdf_links_and_joints(sdf, prefix = "", parent_name = "", world_name: nil, &producer_resolver)
+        # @api private
+        #
+        # Define frames for links, and either static, dynamic or example transformations
+        # for joints
+        #
+        # @param [SDF::Model] sdf
+        # @param [#[]] filter an object that will be called `filter[link, link_full_name]`
+        #   and should return true if the link should be included in the transformer
+        #   definitions or not. If nil, all links are included.
+        # @param [#call] producer_resolver if given, it will be called with a joint
+        #   (a SDF::Joint) and should return a producer for the joint's transformation
+        #   In that case, the joint will be represented as a dynamic transform
+        def parse_sdf_links_and_joints(
+            sdf, prefix = "", parent_name = "",
+            filter: nil, world_name: nil, &producer_resolver
+        )
             submodel2model = Hash.new
             submodel2model[sdf] = Eigen::Isometry3.Identity
             sdf.each_model_with_name do |submodel, _|
                 submodel2model[submodel] = sdf_link_pose_in_model(submodel, sdf)
             end
 
-            relative_link_names = Hash.new
+            relative_link_names = {}
+            excluded_links = Set.new
             sdf.each_link_with_name do |l, l_name|
-                frames sdf_append_name(prefix, l_name)
+                full_name = sdf_append_name(prefix, l_name)
+
+                if filter && !filter[l, full_name]
+                    excluded_links << l
+                    next
+                end
+
+                frames << full_name
                 relative_link_names[l] = l_name
             end
 
