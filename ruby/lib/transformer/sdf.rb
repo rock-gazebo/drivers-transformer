@@ -12,8 +12,10 @@ module Transformer
             sdf.each_world do |w|
                 parse_sdf_world(w, exclude_models: exclude_models, &producer_resolver)
             end
+
             sdf.each_model do |m|
                 next if exclude_models.include?(m.name) || exclude_models.include?(m)
+
                 parse_sdf_model(m, "", "", &producer_resolver)
             end
         end
@@ -23,6 +25,7 @@ module Transformer
             frames world_full_name
             sdf.each_model do |m|
                 next if exclude_models.include?(m.name) || exclude_models.include?(m)
+
                 parse_sdf_model(m, "", world_full_name, world_name: world_full_name, &producer_resolver)
             end
         end
@@ -80,7 +83,7 @@ module Transformer
         def parse_sdf_links_and_joints(sdf, prefix = "", parent_name = "", world_name: nil, &producer_resolver)
             submodel2model = Hash.new
             submodel2model[sdf] = Eigen::Isometry3.Identity
-            sdf.each_model_with_name do |submodel, m_name|
+            sdf.each_model_with_name do |submodel, _|
                 submodel2model[submodel] = sdf_link_pose_in_model(submodel, sdf)
             end
 
@@ -93,12 +96,16 @@ module Transformer
             world_link = ::SDF::Link::World
 
             if canonical_link = sdf.canonical_link
-                static_transform(Eigen::Vector3.Zero, sdf_append_name(prefix, canonical_link.name) => parent_name)
+                static_transform(
+                    Eigen::Vector3.Zero,
+                    sdf_append_name(prefix, canonical_link.name) => parent_name
+                )
             end
 
             sdf.each_joint_with_name do |j, j_name|
                 parent = j.parent_link
                 child  = j.child_link
+                next if excluded_links.include?(parent) || excluded_links.include?(child)
 
                 if parent == ::SDF::Link::World
                     child2model  = submodel2model[child.parent] * child.pose
@@ -129,16 +136,19 @@ module Transformer
                 end
 
                 # Handle the special 'world' link
-                if world_name && (parent == world_link)
-                    parent_frame_name = world_name 
-                else
-                    parent_frame_name = sdf_append_name(parent_name, relative_link_names[parent])
-                end
-                if world_name && (child == world_link)
-                    child_frame_name = world_name
-                else
-                    child_frame_name  = sdf_append_name(parent_name, relative_link_names[child])
-                end
+                parent_frame_name =
+                    if world_name && (parent == world_link)
+                        world_name
+                    else
+                        sdf_append_name(parent_name, relative_link_names[parent])
+                    end
+
+                child_frame_name =
+                    if world_name && (child == world_link)
+                        world_name
+                    else
+                        sdf_append_name(parent_name, relative_link_names[child])
+                    end
 
                 if upper == lower
                     static_transform child2parent, child_frame_name => parent_frame_name
