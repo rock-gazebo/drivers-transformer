@@ -98,8 +98,7 @@ module Transformer
         def sdf_add_root_model(sdf, prefix = "")
             return unless (canonical_link = sdf.canonical_link)
 
-            static_transform(
-                Eigen::Vector3.Zero,
+            identity_transform(
                 sdf_append_name(prefix, "#{sdf.name}::#{canonical_link.name}") =>
                     sdf_append_name(prefix, sdf.name)
             )
@@ -141,15 +140,13 @@ module Transformer
                 relative_link_names[l] = l_name
             end
 
-            world_link = ::SDF::Link::World
-
-            if (canonical_link = sdf.canonical_link)
-                static_transform(
-                    Eigen::Vector3.Zero,
-                    sdf_append_name(prefix, canonical_link.name) => parent_name
-                )
+            sdf_define_model_frame(sdf, parent_name, prefix)
+            sdf.each_model_with_name do |submodel, submodel_name|
+                submodel_frame_name = sdf_append_name(prefix, submodel_name)
+                sdf_define_model_frame(submodel, submodel_frame_name, submodel_frame_name)
             end
 
+            world_link = ::SDF::Link::World
             sdf.each_joint_with_name do |j, j_name|
                 parent = j.parent_link
                 child  = j.child_link
@@ -212,6 +209,14 @@ module Transformer
                     example_transform post2pre, joint_post => joint_pre
                 end
             end
+        end
+
+        def sdf_define_model_frame(sdf, model_frame_name, prefix)
+            return unless (canonical_link = sdf.canonical_link)
+
+            identity_transform(
+                sdf_append_name(prefix, canonical_link.name) => model_frame_name
+            )
         end
     end
     Transformer::Configuration.include SDF
