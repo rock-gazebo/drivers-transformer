@@ -862,6 +862,26 @@ module Transformer
             joints.each(&block)
         end
 
+        # Resolve a static transformation between the two given frames
+        #
+        # @return [Eigen::Isometry3]
+        # @raise [TransformationNotFound]
+        # @see try_resolve_static_chain
+        def resolve_static_chain(from_frame, to_frame)
+            TransformationManager.new(self).resolve_static_chain(from_frame, to_frame)
+        end
+
+        # Try resolving a static transformation between the two given frames
+        #
+        # Unlike {#resolve_static_chain}, return nil if a chain cannot be found
+        #
+        # @return [Eigen::Isometry3,nil]
+        # @see try_resolve_static_chain
+        def try_resolve_static_chain(from_frame, to_frame)
+            resolve_static_chain(from_frame, to_frame)
+        rescue TransformationNotFound # rubocop:disable Lint/SuppressedException
+        end
+
         def pretty_print(pp)
             pp.text "Transformer configuration"
             pp.nest(2) do
