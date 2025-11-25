@@ -502,11 +502,10 @@ module Transformer
         # Returns true if this transformer configuration and the given one are
         # compatible, i.e. if #merge would not remove any information
         def compatible_with?(other)
-            transforms.each do |fromto, tr|
-                next if !other.transforms.has_key?(fromto)
-                return false if other.transforms[fromto] != tr
+            transforms.all? do |fromto, tr|
+                other_tr = other.transforms.fetch(fromto, UNSET)
+                other_tr == tr || other_tr == UNSET
             end
-            true
         end
 
         # Declares frames
