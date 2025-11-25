@@ -94,6 +94,17 @@ module Transformer
             pose
         end
 
+        # Define frames for a model and its canonical link
+        def sdf_add_root_model(sdf, prefix = "")
+            return unless (canonical_link = sdf.canonical_link)
+
+            static_transform(
+                Eigen::Vector3.Zero,
+                sdf_append_name(prefix, "#{sdf.name}::#{canonical_link.name}") =>
+                    sdf_append_name(prefix, sdf.name)
+            )
+        end
+
         # @api private
         #
         # Define frames for links, and either static, dynamic or example transformations

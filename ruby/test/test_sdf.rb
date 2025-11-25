@@ -84,6 +84,31 @@ module Transformer
             assert conf.has_frame?('m::subm::subsubm::l')
         end
 
+        describe "#sdf_add_root_model" do
+            it "declares the frame of the root model" do
+                load_sdf(<<-EOSDF)
+                <sdf><world name="w"><model name="m" /></world></sdf>
+                EOSDF
+
+                assert conf.frame?("m")
+            end
+
+            it "declares the static transform between the root model and its " \
+               "canonical link" do
+                load_sdf(<<-EOSDF)
+                <sdf><world name="w">
+                    <model name="m">
+                        <link name="canonical" />
+                    </model>
+                </world></sdf>
+                EOSDF
+
+                assert conf.frame?("m::canonical")
+                assert_equal Eigen::Isometry3.Identity,
+                             conf.resolve_static_chain("m", "m::canonical")
+            end
+        end
+
         describe "example transform for revolute joints" do
             it "provides an example transform that matches the middle of the axis range " do
                 conf.load_sdf('model://model_with_child_links')
