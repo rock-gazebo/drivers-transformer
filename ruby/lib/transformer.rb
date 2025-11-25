@@ -469,10 +469,6 @@ module Transformer
         # @return [Hash<(String,String),StaticTransform>]
         attr_accessor :example_transforms
 
-        # The set of known frame names
-        #
-        # @return [Set<String>]
-        attr_accessor :frames
         attr_accessor :checker
 
         # A set of joints that are part of this configuration
