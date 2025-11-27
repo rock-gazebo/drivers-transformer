@@ -7,6 +7,7 @@ module Transformer
     module InstanceRequirementsExtension
         # The set of frame mappings defined on this specification
         attribute(:frame_mappings) { Hash.new }
+
         # The transformer configuration that should be used for this
         # InstanceRequirements
         #
@@ -36,8 +37,7 @@ module Transformer
         # Declare a specialized transformation producer for this requirements
         # and its children
         def use_transform_producer(from, to, producer)
-            transformer.dynamic_transform producer,
-                from => to
+            transformer.dynamic_transform producer, from => to
             self
         end
 

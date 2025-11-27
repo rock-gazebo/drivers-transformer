@@ -524,13 +524,15 @@ module Transformer
 
         # Load a transformer configuration file
         def load(*conf_file)
-	    begin
-		file_name = File.join(*conf_file)
-	    rescue TypeError => e
-		raise ArgumentError, "could not create path object from #{conf_file}"
-	    end
-	    Transformer.info "loading configuration file #{File.join(*conf_file)}"
-            eval_dsl_file(File.join(*conf_file), self, [], false)
+            begin
+                file_name = File.join(*conf_file)
+            rescue TypeError => e
+                raise ArgumentError,
+                      "could not create path object from #{conf_file}: #{e}"
+            end
+
+            Transformer.info "loading configuration file #{file_name}"
+            eval_dsl_file(file_name, self, [], false)
         end
 
         # Used in the transformer configuration files to load other files. This
@@ -539,27 +541,33 @@ module Transformer
             load(*conf_file)
         end
 
-        # True if +frame+ is a defined frame
-        def has_frame?(frame)
-            self.frames.include?(frame.to_s)
+        # Checks if a frame name is defined on this configuration
+        def frame?(frame)
+            @frames.include?(frame.to_s)
         end
 
+        # @deprecated use {#frame?} instead
+        def has_frame?(frame) # rubocop:disable Naming/PredicateName
+            @frames.include?(frame.to_s)
+        end
+
+        # Whether this configuration has any transformations
         def empty?
-            transforms.empty?
+            @transforms.empty?
         end
 
         def rename_frames(mapping)
             frames = Set.new
             @frames.each { |f| frames << (mapping[f] || f) }
 
-            transforms = Hash.new
-            @transforms.each do |(from, to), tr|
+            transforms = {}
+            @transforms.each_value do |tr|
                 tr = tr.rename_frames(mapping).freeze
                 transforms[[tr.from, tr.to]] = tr
             end
 
-            example_transforms = Hash.new
-            @example_transforms.each do |(from, to), tr|
+            example_transforms = {}
+            @example_transforms.each_value do |tr|
                 tr = tr.rename_frames(mapping).freeze
                 example_transforms[[tr.from, tr.to]] = tr
             end
@@ -591,13 +599,15 @@ module Transformer
 
         def parse_transform_hash(hash, expected_size)
             if expected_size && hash.size != expected_size
-                raise ArgumentError, "expected #{expected_size} transformation(s), got #{hash}"
+                raise ArgumentError,
+                      "expected #{expected_size} transformation(s), got #{hash}"
             end
 
             hash.to_a
         end
+
         def parse_single_transform(hash)
-            return parse_transform_hash(hash, 1).first
+            parse_transform_hash(hash, 1).first
         end
 
         # call-seq:
@@ -615,17 +625,18 @@ module Transformer
 
             checker.check_producer(producer)
             tr = DynamicTransform.new(from, to, producer)
-	    add_transform(tr)
+            add_transform(tr)
         end
 
         # Declare a transformation
         #
         # @see static_transform dynamic_transform
-	def add_transform(tr)
+        def add_transform(tr)
             checker.check_transformation(frames, tr)
-	    if tr.from == tr.to
-		raise ArgumentError, "trying to register a transformation from #{tr.from} onto itself"
-	    end
+            if tr.from == tr.to
+                raise ArgumentError,
+                      "trying to register a transformation from #{tr.from} onto itself"
+            end
             tr.freeze
             transforms[[tr.from, tr.to]] = tr
 	end
@@ -636,9 +647,10 @@ module Transformer
         # @see example_transform
         def add_example_transform(tr)
             checker.check_transformation(frames, tr)
-	    if tr.from == tr.to
-		raise ArgumentError, "trying to register a transformation from #{tr.from} onto itself"
-	    end
+            if tr.from == tr.to
+                raise ArgumentError,
+                      "trying to register a transformation from #{tr.from} onto itself"
+            end
             tr.freeze
             example_transforms[[tr.from, tr.to]] = tr
         end
@@ -684,7 +696,7 @@ module Transformer
             if !rotation.kind_of?(Eigen::Quaternion)
                 raise ArgumentError, "the provided rotation is not an Eigen::Quaternion"
             end
-            return from, to, translation, rotation
+            [from, to, translation, rotation]
         end
 
         # Declares a new static transformation
@@ -732,7 +744,7 @@ module Transformer
         def example_transform(*transformation)
             from, to, translation, rotation = validate_static_transform_arguments(*transformation)
             tr = StaticTransform.new(from, to, translation, rotation)
-	    add_example_transform(tr)
+            add_example_transform(tr)
             tr
         end
 
@@ -747,16 +759,15 @@ module Transformer
         # false otherwise, and raises ArgumentError if either +from+ or +to+ are
         # not registered frames.
         def has_transform?(from, to)
-            result = transforms.has_key?([from, to])
+            return true if transforms.key?([from, to])
 
-            if !result
-                if !has_frame?(from)
-                    raise ArgumentError, "#{from} is not a registered frame"
-                elsif !has_frame?(to)
-                    raise ArgumentError, "#{to} is not a registered frame"
-                end
+            if !has_frame?(from)
+                raise ArgumentError, "#{from} is not a registered frame"
+            elsif !has_frame?(to)
+                raise ArgumentError, "#{to} is not a registered frame"
             end
-            result
+
+            false
         end
 
         # @deprecated for backward compatibility only, renamed to {#transform_for} for consistency with the rest of the API
@@ -768,17 +779,15 @@ module Transformer
         # transformation, if there is one. If none is found, raises
         # ArgumentError
         def transform_for(from, to)
-            result = transforms[[from, to]]
-            if !result
-                if !has_frame?(from)
-                    raise ArgumentError, "#{from} is not a registered frame (#{frames.to_a.sort.join(", ")})"
-                elsif !has_frame?(to)
-                    raise ArgumentError, "#{to} is not a registered frame (#{frames.to_a.sort.join(", ")})"
-                else
-                    raise ArgumentError, "there is no registered transformations between #{from} and #{to}"
-                end
+            if (result = transforms[[from, to]])
+               result
+            elsif !has_frame?(from)
+                raise ArgumentError, "#{from} is not a registered frame (#{frames.to_a.sort.join(", ")})"
+            elsif !has_frame?(to)
+                raise ArgumentError, "#{to} is not a registered frame (#{frames.to_a.sort.join(", ")})"
+            else
+                raise ArgumentError, "there is no registered transformations between #{from} and #{to}"
             end
-            result
         end
 
         # Returns an example transformation for the given set of frames
@@ -788,7 +797,7 @@ module Transformer
         #   {example_transform}, or a StaticTransform object that represents
         #   identity
         def example_transform_for(from, to)
-            if result = example_transforms[[from, to]]
+            if (result = example_transforms[[from, to]])
                 result
             elsif !has_frame?(from)
                 raise ArgumentError, "#{from} is not a registered frame"

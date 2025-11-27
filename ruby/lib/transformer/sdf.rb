@@ -76,19 +76,20 @@ module Transformer
             end
         end
 
-        def sdf_link_pose_in_world(m)
+        def sdf_link_pose_in_world(model)
             pose = Eigen::Isometry3.Identity
-            while !m.kind_of?(::SDF::World)
-                pose = m.pose * pose
-                m = m.parent
+            until model.kind_of?(::SDF::World)
+                pose = model.pose * pose
+                model = model.parent
             end
             pose
         end
-        def sdf_link_pose_in_model(m, sdf)
+
+        def sdf_pose_in_model(object, sdf)
             pose = Eigen::Isometry3.Identity
-            while m!=sdf
-                pose = m.pose * pose
-                m = m.parent
+            while object != sdf
+                pose = object.pose * pose
+                object = object.parent
             end
             pose
         end
@@ -109,10 +110,10 @@ module Transformer
             sdf, prefix = "", parent_name = "",
             filter: nil, world_name: nil, &producer_resolver
         )
-            submodel2model = Hash.new
+            submodel2model = {}
             submodel2model[sdf] = Eigen::Isometry3.Identity
             sdf.each_model_with_name do |submodel, _|
-                submodel2model[submodel] = sdf_link_pose_in_model(submodel, sdf)
+                submodel2model[submodel] = sdf_pose_in_model(submodel, sdf)
             end
 
             relative_link_names = {}
@@ -131,7 +132,7 @@ module Transformer
 
             world_link = ::SDF::Link::World
 
-            if canonical_link = sdf.canonical_link
+            if (canonical_link = sdf.canonical_link)
                 static_transform(
                     Eigen::Vector3.Zero,
                     sdf_append_name(prefix, canonical_link.name) => parent_name
