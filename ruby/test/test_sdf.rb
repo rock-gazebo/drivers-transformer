@@ -84,6 +84,31 @@ module Transformer
             assert conf.has_frame?('m::subm::subsubm::l')
         end
 
+        describe "#sdf_add_root_model" do
+            it "declares the frame of the root model" do
+                load_sdf(<<-EOSDF)
+                <sdf><world name="w"><model name="m" /></world></sdf>
+                EOSDF
+
+                assert conf.frame?("m")
+            end
+
+            it "declares the static transform between the root model and its " \
+               "canonical link" do
+                load_sdf(<<-EOSDF)
+                <sdf><world name="w">
+                    <model name="m">
+                        <link name="canonical" />
+                    </model>
+                </world></sdf>
+                EOSDF
+
+                assert conf.frame?("m::canonical")
+                assert_equal Eigen::Isometry3.Identity,
+                             conf.resolve_static_chain("m", "m::canonical")
+            end
+        end
+
         describe "example transform for revolute joints" do
             it "provides an example transform that matches the middle of the axis range " do
                 conf.load_sdf('model://model_with_child_links')
@@ -180,7 +205,19 @@ module Transformer
         describe "handling of models in models" do
             it "creates properly namespaced frames" do
                 conf.load_sdf('model://joint_with_world_link')
-                assert conf.has_frame?('root::submodel::l')
+                assert conf.frame?('root::submodel::l')
+            end
+            it "defines a frame for the submodel" do
+                conf.load_sdf('model://joint_with_world_link')
+                assert conf.frame?('root::submodel')
+            end
+            it "connects the submodel's frame to its canonical link" do
+                conf.load_sdf("model://joint_with_world_link")
+                assert_equal(
+                    Eigen::Isometry3.Identity,
+                    conf.transform_for("root::submodel::l", "root::submodel")
+                        .to_isometry
+                )
             end
             it "handles namespaces properly when creating cross-model joints" do
                 conf.load_sdf('model://joint_with_world_link')
