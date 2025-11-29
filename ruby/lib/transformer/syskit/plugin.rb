@@ -338,18 +338,40 @@ module Transformer
             end
         end
 
+        # Whether the transformer extension has been plugged into the Syskit application
+        # via {.enable}
+        #
+        # Note that this checks the infrastructure. The functionality itself can still
+        # be disabled dynamically via
+        # {Transformer::ConfigurationExtension#transformer_enabled=}
+        def self.enabled?
+            Roby::Plan <= Transformer::PlanExtension
+        end
+
+        # Plug the Syskit transformer extension into the current Syskit application
+        #
+        # Note that this really injects all the extensins and handlers from the transformer
+        # in the current application. However, the functionality itself can still be
+        # disabled via {Transformer::ConfigurationExtension#transformer_enabled=}
         def self.enable
+            if enabled?
+                raise ArgumentError,
+                      "attempting to enable the Syskit plugin functionality twice. " \
+                      "Transformer::Syskit.enable should be called only once. Use " \
+                      "Syskit.conf.transformer_enabled= to dynamically disable/enable it"
+            end
+
             Roby.app.add_plugin 'syskit-transformer', RobyAppPlugin
 
             # Maintain a transformer broadcaster on the main engine
             Roby::ExecutionEngine.add_propagation_handler(description: 'syskit-transformer transformer broadcaster start') do |plan|
-            if Syskit.conf.transformer_broadcaster_enabled?
-                if !plan.execution_engine.quitting? && plan.find_tasks(OroGen.transformer.Task).not_finished.empty?
-                    # The broadcaster will be updated at most once per
-                    # execution cycle
-                    plan.add_mission_task(OroGen.transformer.Task.to_instance_requirements.period(0.05))
+                if Syskit.conf.transformer_broadcaster_enabled?
+                    if !plan.execution_engine.quitting? && plan.find_tasks(OroGen.transformer.Task).not_finished.empty?
+                        # The broadcaster will be updated at most once per
+                        # execution cycle
+                        plan.add_mission_task(OroGen.transformer.Task.to_instance_requirements.period(0.05))
+                    end
                 end
-            end
             end
 
             Syskit::NetworkGeneration::Engine.register_instanciation_postprocessing do |engine, plan|

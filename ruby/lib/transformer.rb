@@ -469,10 +469,6 @@ module Transformer
         # @return [Hash<(String,String),StaticTransform>]
         attr_accessor :example_transforms
 
-        # The set of known frame names
-        #
-        # @return [Set<String>]
-        attr_accessor :frames
         attr_accessor :checker
 
         # A set of joints that are part of this configuration
@@ -484,30 +480,32 @@ module Transformer
         attr_reader :joints
 
         def initialize(checker = ConfigurationChecker.new)
-            @transforms = Hash.new
+            @transforms = {}
             @frames = Set.new
-            @example_transforms = Hash.new
+            @example_transforms = {}
+            @joints = Set.new
+
             @checker = checker
-            @joints = Array.new
         end
 
         def initialize_copy(old)
-            @transforms = Hash.new
-            @frames = Set.new
-            @example_transforms = Hash.new
-            @checker = old.checker
-            @joints = Array.new
-            merge(old)
+            super
+
+            @transforms.freeze
+            @frames.freeze
+            @example_transforms.freeze
+            @joints.freeze
         end
+
+        UNSET = Object.new.freeze
 
         # Returns true if this transformer configuration and the given one are
         # compatible, i.e. if #merge would not remove any information
         def compatible_with?(other)
-            transforms.each do |fromto, tr|
-                next if !other.transforms.has_key?(fromto)
-                return false if other.transforms[fromto] != tr
+            transforms.all? do |fromto, tr|
+                other_tr = other.transforms.fetch(fromto, UNSET)
+                other_tr == tr || other_tr == UNSET
             end
-            true
         end
 
         # Declares frames
@@ -519,7 +517,9 @@ module Transformer
             frames.each do |i|
                 checker.check_frame(i)
             end
-            @frames |= frames.to_set
+
+            @frames = @frames.dup if @frames.frozen?
+            @frames.merge(frames)
         end
 
         # Load a transformer configuration file
@@ -584,17 +584,38 @@ module Transformer
         # @param [Configuration] conf
         # @return self
         def merge(conf)
-            transforms.merge!(conf.transforms)
-            example_transforms.merge!(conf.example_transforms)
-            @frames |= conf.frames
-            joints |= conf.joints
+            @transforms = resolve_merge(@transforms, conf.transforms) do |a, b|
+                a.merge(b)
+            end
+
+            @example_transforms =
+                resolve_merge(@example_transforms, conf.example_transforms) do |a, b|
+                    a.merge(b)
+                end
+
+            @frames = resolve_merge(@frames, conf.frames, &:|)
+            @joints = resolve_merge(@joints, conf.joints, &:|)
+
             self
         end
 
+        def resolve_merge(this_object, other_object)
+            if this_object.empty?
+                other_object.freeze
+            elsif other_object.empty?
+                this_object
+            elsif this_object.equal?(other_object)
+                this_object
+            else
+                yield(this_object, other_object)
+            end
+        end
+
         def clear
-            transforms.clear
-            example_transforms.clear
-            frames.clear
+            @transforms = {}
+            @example_transforms = {}
+            @frames = Set.new
+            @joints = Set.new
         end
 
         def parse_transform_hash(hash, expected_size)
@@ -638,8 +659,9 @@ module Transformer
                       "trying to register a transformation from #{tr.from} onto itself"
             end
             tr.freeze
-            transforms[[tr.from, tr.to]] = tr
-	end
+            @transforms = @transforms.dup if @transforms.frozen?
+            @transforms[[tr.from, tr.to]] = tr
+        end
 
         # Registers a transformation object as begin an example transformation
         # for a given frame change
@@ -652,7 +674,9 @@ module Transformer
                       "trying to register a transformation from #{tr.from} onto itself"
             end
             tr.freeze
-            example_transforms[[tr.from, tr.to]] = tr
+
+            @example_transforms = @example_transforms.dup if @example_transform.frozen?
+            @example_transforms[[tr.from, tr.to]] = tr
         end
 
         # @api private
@@ -847,7 +871,8 @@ module Transformer
         #   return its name
         # @return [void]
         def register_joint(from, to, joint)
-            joints << [from, to, joint]
+            @joints = @joints.dup if @joints.frozen?
+            @joints << [from, to, joint]
         end
 
         # Enumerates the joints registered on this configuration
