@@ -6,7 +6,7 @@
 #include <base/Time.hpp>
 #include <aggregator/StreamAligner.hpp>
 #include <map>
-#include <boost/bind.hpp>
+#include <functional>
 #include <base/samples/RigidBodyState.hpp>
 #include "TransformationStatus.hpp"
 
@@ -407,7 +407,7 @@ class Transformer
 	 * */
 	void registerTransformCallback(Transformation &transform , boost::function<void (const base::Time &ts, const Transformation &t)> callback) 
 	{
-	    transform.registerUpdateCallback(boost::bind( callback, _1, boost::ref(transform) ));
+	    transform.registerUpdateCallback(std::bind( callback, std::placeholders::_1, boost::ref(transform) ));
 	}
 
 	/**
@@ -417,7 +417,7 @@ class Transformer
 	 * */
 	template <class T> int registerDataStream(base::Time dataPeriod, boost::function<void (const base::Time &ts, const T &value)> callback, int priority = -1, const std::string &name = std::string())
 	{
-	    return aggregator.registerStream<T>(boost::bind( callback, _1, _2), 0, dataPeriod, priority, name);
+	    return aggregator.registerStream<T>(std::bind( callback, std::placeholders::_1, std::placeholders::_2), 0, dataPeriod, priority, name);
 	};
 
 	/**
@@ -427,7 +427,7 @@ class Transformer
 	 * */
 	template <class T> int registerDataStreamWithTransform(base::Time dataPeriod, Transformation &transformation, boost::function<void (const base::Time &ts, const T &value, const Transformation &t)> callback, int priority = - 1, const std::string &name = std::string())
 	{
-	    return aggregator.registerStream<T>(boost::bind( callback, _1, _2, boost::ref(transformation) ), 0, dataPeriod, priority, name);
+	    return aggregator.registerStream<T>(std::bind( callback, std::placeholders::_1, std::placeholders::_2, boost::ref(transformation) ), 0, dataPeriod, priority, name);
 	};
 
 	/**
