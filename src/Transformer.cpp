@@ -4,6 +4,7 @@
 #include <assert.h>
 #include <base-logging/Logging.hpp>
 #include <sstream>
+#include <functional>
 
 namespace transformer {
     
@@ -269,7 +270,7 @@ DynamicTransformationElement::DynamicTransformationElement(const std::string& so
     //giving a buffersize of zero means no buffer limitation at all
     //giving a period of zero means, block until next sample is available
     streamIdx = aggregator.registerStream<TransformationType>(
-	    boost::bind( &transformer::DynamicTransformationElement::aggregatorCallback , this, _1, _2 ), 
+	    std::bind( &transformer::DynamicTransformationElement::aggregatorCallback , this, std::placeholders::_1, std::placeholders::_2 ), 
 	    0, base::Time(), priority, sourceFrame + std::string("2") + targetFrame);
 }
 
